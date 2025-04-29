@@ -1,125 +1,122 @@
-using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using OpenSteamworks.Client.Apps.Library;
-using OpenSteamworks.Client.Managers;
-using OpenSteamworks.ClientInterfaces;
 using OpenSteamworks.Data.Enums;
-using OpenSteamworks.Generated;
 using OpenSteamworks.Messaging;
 using OpenSteamworks.Protobuf;
-using OpenSteamworks.Utils;
 using SkiaSharp;
 using OpenSteamworks.Data;
 using OpenSteamClient.Logging;
+using OpenSteamworks.Data.Structs;
+using OpenSteamworks.Messaging.SharedConnection;
 
 namespace OpenSteamworks.Client.Apps.Assets;
 
+//TODO: Copied from old apps system, needs rewrite and cleanup!
 /// <summary>
 /// Generates library assets for games which don't have hero art specified.
 /// </summary>
 // The code here absolutely reeks. Wrote this shit in a day. Works pretty well though.
-public class LibraryAssetsGenerator {
+internal class LibraryAssetsGenerator {
     public readonly struct GenerateAssetRequest {
-        public AppId_t AppID { get; init; }
+        public CGameID GameID { get; init; }
         public bool NeedsHero { get; init; }
         public bool NeedsPortrait { get; init; }
 
-        public GenerateAssetRequest(AppId_t appid, bool needsHero, bool needsPortrait) {
-            this.AppID = appid;
+        public GenerateAssetRequest(CGameID appid, bool needsHero, bool needsPortrait) {
+            this.GameID = appid;
             this.NeedsHero = needsHero;
             this.NeedsPortrait = needsPortrait;
         }
     }
 
     private readonly List<GenerateAssetRequest> assetRequests;
-    private readonly Func<AppId_t, LibraryManager.ELibraryAssetType, string> getPathFunc;
+    private readonly Func<CGameID, ELibraryAssetType, string> getPathFunc;
     private readonly ISteamClient steamClient;
     private readonly ILogger logger;
+    private readonly ILoggerFactory loggerFactory;
 
-    public LibraryAssetsGenerator(InstallManager installManager, ISteamClient steamClient, ILoggerFactory loggerFactory, List<GenerateAssetRequest> assetRequests, Func<AppId_t, LibraryManager.ELibraryAssetType, string> getPathFunc) {
-        this.logger = loggerFactory.CreateLogger("LibraryAssetsGenerator");
+    public LibraryAssetsGenerator(ISteamClient steamClient, ILoggerFactory loggerFactory, List<GenerateAssetRequest> assetRequests, Func<CGameID, ELibraryAssetType, string> getPathFunc)
+    {
+	    this.loggerFactory = loggerFactory;
+	    this.logger = loggerFactory.CreateLogger("LibraryAssetsGenerator");
         this.steamClient = steamClient;
         this.assetRequests = assetRequests;
         this.getPathFunc = getPathFunc;
     }
     
-    public async Task<List<AppId_t>> Generate() {
-        List<AppId_t> successfulAppIds = new();
-        using (var conn = SharedConnection.AllocateConnection())
+    public async Task<List<CGameID>> Generate() {
+        List<CGameID> successfulAppIds = new();
+        using var conn = new Connection(new SharedConnectionTransport(steamClient, loggerFactory));
+        ProtoMsg<CStoreBrowse_GetItems_Request> msg = new("StoreBrowse.GetItems#1");
+        foreach (var item in assetRequests)
         {
-            ProtoMsg<CStoreBrowse_GetItems_Request> msg = new("StoreBrowse.GetItems#1");
-            foreach (var item in assetRequests)
-            {
-                msg.Body.Ids.Add(new StoreItemID() { Appid = item.AppID });
+            msg.Body.Ids.Add(new StoreItemID() { Appid = item.GameID.AppID });
+        }
+        
+        StringBuilder builder = new(128);
+        this.steamClient.IClientUser.GetLanguage(builder, 128);
+
+        msg.Body.DataRequest = new() { 
+            IncludeAssets = true, 
+            IncludeScreenshots = true, 
+            IncludeAllPurchaseOptions = false, 
+            IncludeAssetsWithoutOverrides = false, 
+            IncludeBasicInfo = false, 
+            IncludeFullDescription = false, 
+            IncludeIncludedItems = false, 
+            IncludePlatforms = false, 
+            IncludeRatings = false, 
+            IncludeRelease = false, 
+            IncludeReviews = false, 
+            IncludeSupportedLanguages = false, 
+            IncludeTagCount = 0, 
+            IncludeTrailers = false 
+        };
+
+        msg.Body.Context = new() { CountryCode = steamClient.IClientUser.GetUserCountry(), SteamRealm = (int)steamClient.IClientUtils.GetSteamRealm(), Elanguage = (int)ELanguageConversion.ELanguageFromAPIName(builder.ToString()), Language = builder.ToString() };
+        var resp = await conn.SendServiceMethod<CStoreBrowse_GetItems_Response>(msg);
+        
+        foreach (var item in resp.Body.StoreItems)
+        {
+            if (item == null) {
+                continue;
             }
-            
-            StringBuilder builder = new(128);
-            this.steamClient.IClientUser.GetLanguage(builder, 128);
 
-            msg.Body.DataRequest = new() { 
-                IncludeAssets = true, 
-                IncludeScreenshots = true, 
-                IncludeAllPurchaseOptions = false, 
-                IncludeAssetsWithoutOverrides = false, 
-                IncludeBasicInfo = false, 
-                IncludeFullDescription = false, 
-                IncludeIncludedItems = false, 
-                IncludePlatforms = false, 
-                IncludeRatings = false, 
-                IncludeRelease = false, 
-                IncludeReviews = false, 
-                IncludeSupportedLanguages = false, 
-                IncludeTagCount = 0, 
-                IncludeTrailers = false 
-            };
+            var assetRequest = assetRequests.Find(r => r.GameID.AppID == item.Appid);
+            if (!Convert.ToBoolean(item.Success) || assetRequest.NeedsHero == false && assetRequest.NeedsPortrait == false || !item.HasAppid) {
+                continue;
+            }
 
-            msg.Body.Context = new() { CountryCode = steamClient.IClientUser.GetUserCountry(), SteamRealm = (int)steamClient.IClientUtils.GetSteamRealm(), Elanguage = (int)ELanguageConversion.ELanguageFromAPIName(builder.ToString()), Language = builder.ToString() };
-            var resp = await conn.SendAndWaitForServiceResponse<CStoreBrowse_GetItems_Response, CStoreBrowse_GetItems_Request>(msg);
-            
-            foreach (var item in resp.Body.StoreItems)
-            {
-                if (item == null) {
-                    continue;
+            bool heroResult = true;
+            if (assetRequest.NeedsHero) {
+                try
+                {
+                    heroResult = await CreateHero(item, getPathFunc(new CGameID(item.Appid), ELibraryAssetType.Hero));
                 }
+                catch (Exception e)
+                {
+                    logger.Error($"Failed to generate hero for {item.Appid}");
+                    logger.Error(e);
+                    heroResult = false;
+                }
+            }
 
-                var assetRequest = assetRequests.Find(r => r.AppID == item.Appid);
-                if (!Convert.ToBoolean(item.Success) || assetRequest.NeedsHero == false && assetRequest.NeedsPortrait == false || !item.HasAppid) {
-                    continue;
+            bool portraitResult = true;
+            if (assetRequest.NeedsPortrait) {
+                try
+                {
+                    portraitResult = await CreatePortrait(item, getPathFunc(new CGameID(item.Appid), ELibraryAssetType.Portrait));
                 }
-
-                bool heroResult = true;
-                if (assetRequest.NeedsHero) {
-                    try
-                    {
-                        heroResult = await CreateHero(item, getPathFunc(item.Appid, LibraryManager.ELibraryAssetType.Hero));
-                    }
-                    catch (System.Exception e)
-                    {
-                        logger.Error($"Failed to generate hero for {item.Appid}");
-                        logger.Error(e);
-                        heroResult = false;
-                    }
+                catch (Exception e)
+                {
+                    logger.Error($"Failed to generate portrait for {item.Appid}");
+                    logger.Error(e);
+                    portraitResult = false;
                 }
-
-                bool portraitResult = true;
-                if (assetRequest.NeedsPortrait) {
-                    try
-                    {
-                        portraitResult = await CreatePortrait(item, getPathFunc(item.Appid, LibraryManager.ELibraryAssetType.Portrait));
-                    }
-                    catch (System.Exception e)
-                    {
-                        logger.Error($"Failed to generate portrait for {item.Appid}");
-                        logger.Error(e);
-                        portraitResult = false;
-                    }
-                }
-            
-                if (portraitResult && heroResult) {
-                    successfulAppIds.Add(assetRequest.AppID);
-                }
+            }
+        
+            if (portraitResult && heroResult) {
+                successfulAppIds.Add(assetRequest.GameID);
             }
         }
 

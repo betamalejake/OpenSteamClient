@@ -8,6 +8,7 @@ using OpenSteamworks.Utils;
 
 namespace OpenSteamworks.Client.Apps.Library;
 
+//TODO: Copied from old apps system, needs rewrite and cleanup!
 public class Collection
 {
     public string ID { get; private set; }
@@ -72,7 +73,7 @@ public class Collection
         {
             // No need to do any special processing here, just save the filter specs
             UtilityFunctions.AssertNotNull(json.filterSpec);
-            
+
             if (json.filterSpec.filterGroups.Length < 7)
             {
                 libraryManager.Logger.Warning("There are less filter groups than 7. Possibly missing or misinterpreting some filters. New length is: " + json.filterSpec.filterGroups.Length);
@@ -107,7 +108,7 @@ public class Collection
                 collection.FriendsInCommonFilter = new(JsonContext.Default.UInt32);
             }
         }
-        
+
         if (json.added == null)
         {
             json.added = new List<uint>();

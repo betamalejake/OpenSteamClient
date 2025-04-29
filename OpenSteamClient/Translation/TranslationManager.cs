@@ -278,7 +278,7 @@ public class TranslationManager : ILogonLifetime
     {
         try
         {
-            return ELanguageConversion.APINameFromELanguage(lang);
+            return ELanguageConversion.ToAPIName(lang);
         }
         catch (System.Exception)
         {

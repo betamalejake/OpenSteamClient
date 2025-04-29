@@ -1,5 +1,6 @@
 namespace OpenSteamworks.Client.Apps.Library;
 
+//TODO: Copied from old apps system, needs rewrite and cleanup!
 public class JSONFilterSpec
 {
     public int nFormatVersion { get; set; } = 2;

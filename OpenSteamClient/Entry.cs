@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using OpenSteamworks.Client.Managers;
 using OpenSteamworks.Data.Enums;
+using OpenSteamworks.Data.Interop;
 using OpenSteamworks.Generated;
 using OpenSteamworks.Utils;
 
@@ -15,34 +16,38 @@ namespace OpenSteamClient;
 /// </summary>
 public static unsafe class CApi
 {
-    private readonly static PinnedUTF8String loggingDir = new();
-    private readonly static PinnedUTF8String installDir = new();  
-    private readonly static PinnedUTF8String currentBeta = new();
+    private static CUtlString? loggingDir;
+    private static CUtlString? installDir;
+    private static CUtlString? currentBeta;
 
-    public static void Initialize(InstallManager installManager) {
-		installDir.CurrentString = installManager.InstallDir;
-		loggingDir.CurrentString = installManager.LogsDir;
-		currentBeta.CurrentString = "clientbeta";
+    public static void Initialize(InstallManager installManager)
+    {
+	    if (loggingDir != null || installDir != null || currentBeta != null)
+		    throw new InvalidOperationException("Initialize called twice!");
+
+		installDir = new(installManager.InstallDir);
+		loggingDir = new(installManager.LogsDir);
+		currentBeta = new("clientbeta");
     }
-	
+
 
 	[UnmanagedCallersOnly(EntryPoint = "SteamBootstrapper_GetInstallDir", CallConvs = [typeof(CallConvCdecl)])]
     public static void* SteamBootstrapper_GetInstallDir() {
         Console.WriteLine("SteamBootstrapper_GetInstallDir called");
-        return installDir.CurrentPtr;
+        return installDir.HasValue ? installDir.Value.Pointer : null;
     }
 
 	[UnmanagedCallersOnly(EntryPoint = "SteamBootstrapper_GetLoggingDir", CallConvs = [typeof(CallConvCdecl)])]
     public static void* SteamBootstrapper_GetLoggingDir() {
         Console.WriteLine("SteamBootstrapper_GetLoggingDir called");
-        return loggingDir.CurrentPtr;
+        return loggingDir.HasValue ? loggingDir.Value.Pointer : null;
     }
 
 	[UnmanagedCallersOnly(EntryPoint = "PermitDownloadClientUpdates", CallConvs = [typeof(CallConvCdecl)])]
     public static void PermitDownloadClientUpdates(bool permit) {
         Console.WriteLine("PermitDownloadClientUpdates called with (permit: " + permit + ")");
     }
-	
+
 	[UnmanagedCallersOnly(EntryPoint = "GetBootstrapperVersion", CallConvs = [typeof(CallConvCdecl)])]
     public static uint GetBootstrapperVersion() {
         Console.WriteLine("GetBootstrapperVersion called");
@@ -52,7 +57,7 @@ public static unsafe class CApi
 	[UnmanagedCallersOnly(EntryPoint = "GetCurrentClientBeta", CallConvs = [typeof(CallConvCdecl)])]
     public static void* GetCurrentClientBeta() {
         Console.WriteLine("GetCurrentClientBeta called");
-        return currentBeta.CurrentPtr;
+        return currentBeta.HasValue ? currentBeta.Value.Pointer : null;
     }
 
 	[UnmanagedCallersOnly(EntryPoint = "SteamBootstrapper_GetEUniverse", CallConvs = [typeof(CallConvCdecl)])]
@@ -97,9 +102,9 @@ public static unsafe class CApi
     }
 
 	[UnmanagedCallersOnly(EntryPoint = "SetClientBeta", CallConvs = [typeof(CallConvCdecl)])]
-    public static void SetClientBeta(void* ptr) {
-        Console.WriteLine("SetClientBeta called");
-        currentBeta.CurrentString = Marshal.PtrToStringUTF8((nint)ptr) ?? string.Empty;
+    public static void SetClientBeta(void* ptr)
+    {
+        Console.WriteLine($"SetClientBeta called (val: {Marshal.PtrToStringUTF8((nint)ptr)})");
     }
 
 	[UnmanagedCallersOnly(EntryPoint = "GetClientLauncherType", CallConvs = [typeof(CallConvCdecl)])]

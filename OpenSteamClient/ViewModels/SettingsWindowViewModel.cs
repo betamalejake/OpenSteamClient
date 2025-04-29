@@ -12,40 +12,42 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
-using OpenSteamworks.ClientInterfaces;
+using OpenSteamworks.Helpers;
 using System.Linq;
 using AvaloniaCommon;
 using OpenSteamworks.Utils;
 using OpenSteamworks.Callbacks;
 using OpenSteamworks.Callbacks.Structs;
 using System.ComponentModel;
-using OpenSteamworks.Client.Apps.Compat;
 using System.Collections.Generic;
 using OpenSteamworks.Client.Config;
+using OpenSteamworks.Data;
 
 namespace OpenSteamClient.ViewModels;
 
-public partial class SettingsWindowViewModel : AvaloniaCommon.ViewModelBase
+public partial class SettingsWindowViewModel : ViewModelBase
 {
-    private readonly TranslationManager tm;
-    private readonly ISteamClient client;
-    private readonly LoginManager loginManager;
-    private readonly SettingsWindow settingsWindow;
-    private readonly ClientApps clientApps;
-    private readonly CompatManager compatManager;
-    private readonly ConfigManager configManager;
+    private readonly TranslationManager _tm;
+    private readonly ISteamClient _client;
+    private readonly LoginManager _loginManager;
+    private readonly SettingsWindow _settingsWindow;
+    private readonly AppsHelper _clientApps;
+    private readonly AppManagerHelper _appManagerHelper;
+    private readonly CompatHelper _compatManager;
+    private readonly ConfigManager _configManager;
 
-    public SettingsWindowViewModel(ConfigManager configManager, ClientApps clientApps, CallbackManager callbackManager, SettingsWindow settingsWindow, CompatManager compatManager, ISteamClient client, TranslationManager tm, LoginManager loginManager)
+    public SettingsWindowViewModel(ConfigManager configManager, AppsHelper clientApps, AppManagerHelper appManagerHelper, CallbackManager callbackManager, SettingsWindow settingsWindow, CompatHelper compatManager, ISteamClient client, TranslationManager tm, LoginManager loginManager)
     {
         callbackManager.Register<LibraryFoldersChanged_t>(OnLibraryFoldersChanged);
-        this.configManager = configManager;
-        this.compatManager = compatManager;
-        this.clientApps = clientApps;
-        this.settingsWindow = settingsWindow;
-        this.client = client;
-        this.tm = tm;
-        this.loginManager = loginManager;
-        this.PropertyChanged += SelfOnPropertyChanged;
+        _configManager = configManager;
+        _compatManager = compatManager;
+        _clientApps = clientApps;
+        _appManagerHelper = appManagerHelper;
+        _settingsWindow = settingsWindow;
+        _client = client;
+        _tm = tm;
+        _loginManager = loginManager;
+        PropertyChanged += SelfOnPropertyChanged;
         RefreshLibraryFolders();
         RefreshCompatTools();
         RefreshLanguages();
@@ -53,49 +55,52 @@ public partial class SettingsWindowViewModel : AvaloniaCommon.ViewModelBase
 
     private void SelfOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SelectedLibraryFolder)) {
-            RefreshGamesList();
-        } else if (e.PropertyName == nameof(SelectedCompatTool)) {
-            SelectedCompatToolChanged();
-        } else if (e.PropertyName == nameof(SelectedLanguage)) {
-            SelectedLanguageChanged();
+        switch (e.PropertyName)
+        {
+            case nameof(SelectedLibraryFolder):
+                RefreshGamesList();
+                break;
+            case nameof(SelectedCompatTool):
+                SelectedCompatToolChanged();
+                break;
+            case nameof(SelectedLanguage):
+                SelectedLanguageChanged();
+                break;
         }
     }
 
     // Library folders window
     private void OnLibraryFoldersChanged(ICallbackHandler handler, LibraryFoldersChanged_t folder)
-    {
-        AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Background, () => RefreshLibraryFolders());
-    }
+        => AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Background, RefreshLibraryFolders);
 
 
     public ObservableCollectionEx<LibraryFolderViewModel> LibraryFolders { get; } = new();
     public ObservableCollectionEx<string> AppsInCurrentLibraryFolder { get; } = new();
 
     [ObservableProperty]
-    private LibraryFolderViewModel? selectedLibraryFolder;
+    private LibraryFolderViewModel? _selectedLibraryFolder;
 
     [ObservableProperty]
-    private int selectedLibraryFolderIdx;
+    private int _selectedLibraryFolderIdx;
 
     public void LibraryFolders_OnAddClicked() {
         AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Send, async () =>
         {
-            var files = await settingsWindow.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            var files = await _settingsWindow.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = tm.GetTranslationForKey("#LibraryFolders_PathToNewLibraryFolder"),
+                Title = _tm.GetTranslationForKey("#LibraryFolders_PathToNewLibraryFolder"),
                 AllowMultiple = false
             });
 
             if (files.Count >= 1)
             {
-                var newFolder = clientApps.AddLibraryFolder(files[0].Path.AbsolutePath);
+                var newFolder = _appManagerHelper.AddLibraryFolder(files[0].Path.AbsolutePath);
                 Console.WriteLine("Got new folder " + newFolder);
 
                 if (newFolder > 0) {
                     RefreshLibraryFolders();
                 } else {
-                    MessageBox.Show(tm.GetTranslationForKey("#LibraryFolders_FailedToAddNewFolderTitle"), tm.GetTranslationForKey("#LibraryFolders_FailedToAddNewFolder"));
+                    MessageBox.Show(_tm.GetTranslationForKey("#LibraryFolders_FailedToAddNewFolderTitle"), _tm.GetTranslationForKey("#LibraryFolders_FailedToAddNewFolder"));
                 }
             }
         });
@@ -106,20 +111,20 @@ public partial class SettingsWindowViewModel : AvaloniaCommon.ViewModelBase
             return;
         }
 
-        if (!clientApps.RemoveLibraryFolder(SelectedLibraryFolder.ID, out uint inUseByApp)) {
-            MessageBox.Show(tm.GetTranslationForKey("#LibraryFolders_FailedToRemoveFolderTitle"), string.Empty, string.Format(tm.GetTranslationForKey("#LibraryFolders_FailedToRemoveFolder"), clientApps.GetAppName(inUseByApp)), AvaloniaCommon.Enums.MessageBoxIcon.ERROR);
+        if (!_appManagerHelper.RemoveLibraryFolder(SelectedLibraryFolder.ID, out AppId_t? inUseByApp)) {
+            MessageBox.Show(_tm.GetTranslationForKey("#LibraryFolders_FailedToRemoveFolderTitle"), string.Empty, string.Format(_tm.GetTranslationForKey("#LibraryFolders_FailedToRemoveFolder"), _clientApps.GetAppLocalizedName(inUseByApp.Value)), AvaloniaCommon.Enums.MessageBoxIcon.ERROR);
         }
     }
 
     private void RefreshLibraryFolders() {
         LibraryFolders.BlockUpdates = true;
-        
+
         LibraryFolders.Clear();
-        LibraryFolders.AddRange(LibraryFolderViewModel.GetLibraryFolders(clientApps));
+        LibraryFolders.AddRange(LibraryFolderViewModel.GetLibraryFolders(_appManagerHelper));
 
         LibraryFolders.BlockUpdates = false;
         LibraryFolders.FireReset();
-        
+
 
         SelectedLibraryFolder = LibraryFolders.FirstOrDefault();
         SelectedLibraryFolderIdx = 0;
@@ -131,9 +136,9 @@ public partial class SettingsWindowViewModel : AvaloniaCommon.ViewModelBase
         AppsInCurrentLibraryFolder.BlockUpdates = true;
         AppsInCurrentLibraryFolder.Clear();
         if (SelectedLibraryFolder != null) {
-            AppsInCurrentLibraryFolder.AddRange(clientApps.GetAppsInFolder(SelectedLibraryFolder.ID).Select(appid => clientApps.GetAppName(appid)));
+            AppsInCurrentLibraryFolder.AddRange(_appManagerHelper.GetAppsInFolder(SelectedLibraryFolder.ID).Select(appid => _clientApps.GetAppLocalizedName(appid)));
         }
-        
+
         AppsInCurrentLibraryFolder.BlockUpdates = false;
         AppsInCurrentLibraryFolder.FireReset();
     }
@@ -143,61 +148,59 @@ public partial class SettingsWindowViewModel : AvaloniaCommon.ViewModelBase
     public ObservableCollectionEx<IDNameViewModel> CompatTools { get; } = new();
 
     [ObservableProperty]
-    private IDNameViewModel? selectedCompatTool;
+    private IDNameViewModel? _selectedCompatTool;
 
-    private void SelectedCompatToolChanged() {
-        if (SelectedCompatTool == null) {
-            return;
-        }
-        
-        compatManager.SpecifyCompatTool(0, SelectedCompatTool.ID, string.Empty, 250);
+    private void SelectedCompatToolChanged()
+    {
+	    if (SelectedCompatTool == null)
+		    return;
+
+	    _compatManager.SetCompatToolForWindowsTitles(SelectedCompatTool.ID, string.Empty);
     }
 
     private void RefreshCompatTools() {
         CompatTools.Clear();
-        var windowsCompatTools = compatManager.CompatToolPlatforms.Where(kv => kv.Value == ERemoteStoragePlatform.PlatformWindows).Select(kv => kv.Key);
-        CompatTools.AddRange(windowsCompatTools.Select(id => new IDNameViewModel(id, compatManager.GetFriendlyNameForCompatTool(id))));
+        CompatTools.AddRange(_compatManager.GetCompatTools(ERemoteStoragePlatform.PlatformWindows).Select(id => new IDNameViewModel(id, _compatManager.GetCompatToolDisplayName(id))));
 
-        SelectedCompatTool = CompatTools.Find(t => t.ID == compatManager.GetCompatToolForApp(0));
+        SelectedCompatTool = CompatTools.Find(t => t.ID == _compatManager.GetAppCompatTool(0));
     }
 
     // Friends
 
     public bool AutologinToFriendsNetwork {
-        get => configManager.Get<UserSettings>().LoginToFriendsNetworkAutomatically;
-        set => configManager.Get<UserSettings>().LoginToFriendsNetworkAutomatically = value;
+        get => _configManager.Get<UserSettings>().LoginToFriendsNetworkAutomatically;
+        set => _configManager.Get<UserSettings>().LoginToFriendsNetworkAutomatically = value;
     }
 
     // Localization
     public ObservableCollectionEx<IDNameViewModel> Languages { get; } = new();
 
     [ObservableProperty]
-    private IDNameViewModel? selectedLanguage;
+    private IDNameViewModel? _selectedLanguage;
 
     private void SelectedLanguageChanged() {
         if (SelectedLanguage == null) {
             return;
         }
 
-        tm.SetLanguage(ELanguageConversion.ELanguageFromAPIName(SelectedLanguage.ID));
+        _tm.SetLanguage(ELanguageConversion.ELanguageFromAPIName(SelectedLanguage.ID));
     }
 
     private void RefreshLanguages() {
         Languages.Clear();
-        foreach (var _item in Enum.GetValues<ELanguage>())
+        foreach (var item in Enum.GetValues<ELanguage>())
         {
-            var item = (ELanguage)_item;
-            bool hasUITranslation = tm.HasUITranslation(item, out string? translationName);
+            bool hasUITranslation = _tm.HasUITranslation(item, out string? translationName);
             if (!hasUITranslation) {
                 translationName = item.ToString();
             } else {
                 translationName += " (UI)";
             }
 
-            string key = ELanguageConversion.APINameFromELanguage(item);
+            string key = item.ToAPIName();
             Languages.Add(new IDNameViewModel(key, translationName));
         }
 
-        SelectedLanguage = Languages.Find(l => l.ID == ELanguageConversion.APINameFromELanguage(tm.CurrentTranslation.Language));
+        SelectedLanguage = Languages.Find(l => l.ID == _tm.CurrentTranslation.Language.ToAPIName());
     }
 }

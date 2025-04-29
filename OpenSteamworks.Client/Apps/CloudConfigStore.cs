@@ -12,7 +12,7 @@ using OpenSteamworks.Client.Enums;
 using OpenSteamworks.Client.Managers;
 using OpenSteamworks.Client.Utils;
 using OpenSteamClient.DI;
-using OpenSteamworks.ClientInterfaces;
+using OpenSteamworks.Helpers;
 using OpenSteamworks.Generated;
 using OpenSteamworks.Messaging;
 using OpenSteamworks.Protobuf.WebUI;
@@ -20,6 +20,7 @@ using OpenSteamworks.Data.Structs;
 using OpenSteamworks.Utils;
 using OpenSteamClient.DI.Lifetime;
 using OpenSteamClient.Logging;
+using OpenSteamworks.Messaging.SharedConnection.Extensions;
 
 namespace OpenSteamworks.Client.Apps;
 
@@ -154,20 +155,20 @@ public class NamespaceData {
 /// </summary>
 public class CloudConfigStore : ILogonLifetime {
     private readonly LoginManager loginManager;
-    private readonly SharedConnection connection;
+    private readonly Connection connection;
     private readonly List<NamespaceData> loadedNamespaces = new();
     private readonly IClientUtils clientUtils;
     private readonly InstallManager installManager;
     private readonly ILogger logger;
 
     public event EventHandler<EUserConfigStoreNamespace>? NamespaceUpdated;
-    public CloudConfigStore(LoginManager loginManager, IClientUtils clientUtils, InstallManager installManager, ILoggerFactory loggerFactory) {
+    public CloudConfigStore(LoginManager loginManager, ISteamClient steamClient, IClientUtils clientUtils, InstallManager installManager, ILoggerFactory loggerFactory) {
         this.logger = loggerFactory.CreateLogger("CloudConfigStore");
         this.installManager = installManager;
         this.clientUtils = clientUtils;
         this.loginManager = loginManager;
-		this.connection = SharedConnection.AllocateConnection();
-		this.connection.RegisterServiceMsg("CloudConfigStoreClient.NotifyChange#1", (IConnectionMsgHandler handler, ProtoMsgBase msg) => this.OnCloudConfigStoreClient_NotifyChange(msg.AsProto<CCloudConfigStore_Change_Notification>()));
+		this.connection = steamClient.AllocateSharedConnection(loggerFactory);
+		this.connection.RegisterHandler("CloudConfigStoreClient.NotifyChange#1", msg => this.OnCloudConfigStoreClient_NotifyChange(msg.AsProto<CCloudConfigStore_Change_Notification>()));
     }
 
     internal string GetNamespaceFilename(NamespaceData ns) {
@@ -317,7 +318,7 @@ public class CloudConfigStore : ILogonLifetime {
             Version = lastVersion
         });
 
-        var resp = await connection.SendAndWaitForServiceResponse<CCloudConfigStore_Download_Response, CCloudConfigStore_Download_Request>(msg);
+        var resp = await connection.SendServiceMethod<CCloudConfigStore_Download_Response>(msg);
         if (resp.Body.Data.Count == 0) {
             logger.Error("Namespace " + @namespace + " doesn't exist.");
             throw new ArgumentException("Namespace " + @namespace + " doesn't exist.");
@@ -400,7 +401,7 @@ public class CloudConfigStore : ILogonLifetime {
             changes.Clear();
         }
 
-        var resp = await connection.SendAndWaitForServiceResponse<CCloudConfigStore_Upload_Response, CCloudConfigStore_Upload_Request>(req);
+        var resp = await connection.SendServiceMethod<CCloudConfigStore_Upload_Response>(req);
         foreach (var item in resp.Body.Versions)
         {
             var ns = this.loadedNamespaces.Find(n => (uint)n.Namespace == item.Enamespace);

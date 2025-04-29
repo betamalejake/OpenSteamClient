@@ -18,9 +18,11 @@
 
     <DockPanel>
         <!-- Current network usage and graph section -->
+        <!-- TODO: We don't have a graph... -->
         <StackPanel DockPanel.Dock="Top">
             <TextBlock Text="Downloading"/>
             <TextBlock Text="{Binding CurrentDownload.Name}"/>
+            <TextBlock Text="{Binding CurrentDownload.EstimatedCompletion}"/>
             <TextBlock Text="{Binding CurrentDownloadRate}"/>
             <TextBlock Text="{Binding CurrentDiskRate}"/>
             <TextBlock Text="{Binding PeakDownloadRate}"/>
@@ -69,7 +71,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    
+
                     <TextBlock Text="Unscheduled"/>
                     <ItemsControl ItemsSource="{Binding UnscheduledDownloads}">
                         <ItemsControl.ItemTemplate>

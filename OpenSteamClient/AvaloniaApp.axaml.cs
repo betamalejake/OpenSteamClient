@@ -48,7 +48,7 @@ public class AvaloniaApp : Application
     {
         var installManager = new InstallManager();
 		CApi.Initialize(installManager);
-		
+
 		var loggerFactory = new LoggerFactory(installManager);
 		Container = new Container(installManager, loggerFactory);
 		Container.ConstructAndRegister<LifetimeManager>();
@@ -129,6 +129,11 @@ public class AvaloniaApp : Application
         // This is kept for the lifetime of the application, which is fine
         Container.Get<LoginManager>().SetProgress(progress);
         Container.Get<LoginManager>().SetExceptionHandler(e => {
+            if (Debugger.IsAttached)
+            {
+                throw e;
+            }
+
             Program.FatalException(e);
         });
 
@@ -149,7 +154,7 @@ public class AvaloniaApp : Application
         };
 
         var loginManager = Container.Get<LoginManager>();
-        if (Container.Get<ISteamClient>().ConnectedWith == ConnectionType.ExistingClient && loginManager.IsLoggedOn())
+        if (Container.Get<ISteamClient>().IsCrossProcess && loginManager.IsLoggedOn())
         {
             var clientUser = Container.Get<IClientUser>();
             StringBuilder username = new StringBuilder(256);
@@ -167,7 +172,7 @@ public class AvaloniaApp : Application
         }
 
         base.OnFrameworkInitializationCompleted();
-       
+
         var icons = TrayIcon.GetIcons(this);
         UtilityFunctions.AssertNotNull(icons);
         foreach (var icon in icons)
@@ -301,7 +306,7 @@ public class AvaloniaApp : Application
             func();
             return;
         }
-        
+
         Dispatcher.UIThread.Invoke(func, priority);
     }
 
@@ -348,8 +353,12 @@ public class AvaloniaApp : Application
     {
         if (!Container.Get<LifetimeManager>().IsShuttingDown)
         {
-            ApplicationLifetime.MainWindow?.Close();
-            ApplicationLifetime.MainWindow = window;
+            if (ApplicationLifetime.MainWindow != window)
+            {
+                ApplicationLifetime.MainWindow?.Close();
+                ApplicationLifetime.MainWindow = window;
+            }
+
             ApplicationLifetime.MainWindow.Show();
         }
 
@@ -380,7 +389,7 @@ public class AvaloniaApp : Application
     }
 
     /// <summary>
-    /// A synchronous exit function. Simply calls Task.Run. 
+    /// A synchronous exit function. Simply calls Task.Run.
     /// </summary>
     public void ExitEventually(int exitCode = 0)
     {

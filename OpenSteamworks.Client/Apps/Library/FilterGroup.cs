@@ -5,6 +5,7 @@ using OpenSteamworks.Utils;
 
 namespace OpenSteamworks.Client.Apps.Library;
 
+//TODO: Copied from old apps system, needs rewrite and cleanup!
 public class FilterGroup<T> where T: notnull {
     public List<T> FilterOptions { get; set; } = new();
     public bool AcceptUnion { get; set; }

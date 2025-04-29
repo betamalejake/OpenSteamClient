@@ -2,7 +2,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OpenSteamClient.ViewModels"
         xmlns:c="using:OpenSteamClient.Controls"
-        xmlns:pages="using:OpenSteamClient.Views.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
@@ -16,7 +15,7 @@
              to set the actual DataContext for runtime, set the DataContext property in code (look at AvaloniaApp.axaml.cs) -->
         <vm:SettingsWindowViewModel/>
     </Design.DataContext>
-    
+
     <!-- TODO: This file is a mess. But in order to split this into multiple pages we'd need to do the whole MainWindow setup all over again. Maybe one day. -->
     <TabControl Margin="5">
         <TabItem c:Translatable.TranslationKey="#SettingsWindow_LibraryFolders_TabHeader">
@@ -74,5 +73,5 @@
             </StackPanel>
         </TabItem>
     </TabControl>
-    
+
 </Window>

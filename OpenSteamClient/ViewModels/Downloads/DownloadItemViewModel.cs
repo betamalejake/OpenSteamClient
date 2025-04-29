@@ -5,74 +5,66 @@ using OpenSteamworks;
 using OpenSteamworks.Client.Config;
 using OpenSteamworks.Client.Enums;
 using OpenSteamworks.Client.Utils;
-using OpenSteamworks.ClientInterfaces;
-using OpenSteamworks.Downloads;
+using OpenSteamworks.Helpers;
 using OpenSteamworks.Data.Structs;
 using OpenSteamworks.Data;
 using OpenSteamClient.DI;
+using OpenSteamworks.Data.Enums;
 
 namespace OpenSteamClient.ViewModels.Downloads;
 
 public partial class DownloadItemViewModel : AvaloniaCommon.ViewModelBase {
-    public string Name => AvaloniaApp.Container.Get<ClientApps>().GetAppName(AppID);
+    public string Name => AvaloniaApp.Container.Get<AppsHelper>().GetAppLocalizedName(AppID);
 
     [ObservableProperty]
-    private AppId_t appID;
+    private AppId_t _appID;
 
     [ObservableProperty]
-    private double currentDownloadProgress;
+    private double _currentDownloadProgress;
 
     [ObservableProperty]
-    private string downloadSize = string.Empty;
+    private string _downloadSize = string.Empty;
 
     [ObservableProperty]
-    private string diskSize = string.Empty;
+    private string _diskSize = string.Empty;
 
     [ObservableProperty]
-    private DateTime? downloadStarted;
+    private DateTime? _downloadStarted;
 
     [ObservableProperty]
-    private DateTime? downloadFinished;
+    private DateTime? _downloadFinished;
 
-    private readonly DownloadManager downloadManager;
-    public DownloadItemViewModel(DownloadManager downloadManager, AppId_t appid) {
-        this.downloadManager = downloadManager;
-        this.downloadManager.DownloadStatsChanged += OnDownloadStatsChanged;
+    [ObservableProperty]
+    private DateTime? _estimatedCompletion;
+
+    private readonly DownloadsHelper _downloadsHelper;
+    public DownloadItemViewModel(DownloadsHelper downloadsHelper, AppId_t appid) {
         AppID = appid;
-        UpdateDownloadInfo();
+        this._downloadsHelper = downloadsHelper;
+        this._downloadsHelper.DownloadChanged += OnDownloadChanged;
     }
 
-    private void OnDownloadStatsChanged(object? sender, DownloadStats e)
+    private void OnDownloadChanged(object? sender, DownloadsHelper.DownloadChangedEventArgs e)
     {
-        UpdateDownloadInfo();
-    }
-
-    private void UpdateDownloadInfo() {
-        var appManager = SteamClient.GetIClientAppManager();
-
-        if (downloadManager.BIsAppUpToDate(AppID)) {
-            // If there's no update, deregister to allow for this object to be GCd
-            this.downloadManager.DownloadStatsChanged -= OnDownloadStatsChanged;
+        if (e.DownloadFinished != DateTime.MinValue) {
+            // Update finished, deregister to allow for this object to be GCd
+            this._downloadsHelper.DownloadChanged -= OnDownloadChanged;
             return;
         }
 
-        if (appManager.GetUpdateInfo(this.AppID, out AppUpdateInfo_s updateInfo)) {
-            //Console.WriteLine($"{AppID}: " + updateInfo.ToString());
-            if (updateInfo.m_unBytesToProcess != 0 && updateInfo.m_unBytesToProcess != updateInfo.m_unBytesProcessed) {
-                this.CurrentDownloadProgress = (double)updateInfo.m_unBytesProcessed / (double)updateInfo.m_unBytesToProcess;
-            } else if (updateInfo.m_unBytesToDownload != 0 && updateInfo.m_unBytesToDownload != updateInfo.m_unBytesDownloaded) {
-                this.CurrentDownloadProgress = (double)updateInfo.m_unBytesDownloaded / (double)updateInfo.m_unBytesToDownload;
-            }
-            
-            this.DownloadSize = DataUnitStrings.GetStringForSize(updateInfo.m_unBytesToDownload, DataSizeUnit.Auto_GB_MB_KB_B);
-            this.DiskSize = DataUnitStrings.GetStringForSize(updateInfo.m_unBytesToProcess, DataSizeUnit.Auto_GB_MB_KB_B);
-        } else {
-            // If there's no update info, deregister to allow for this object to be GCd
-            this.downloadManager.DownloadStatsChanged -= OnDownloadStatsChanged;
-            return;
+        //Console.WriteLine($"{AppID}: " + updateInfo.ToString());
+        if (e.TotalToProcess != 0 && e.TotalToProcess != e.TotalProcessed) {
+            this.CurrentDownloadProgress = (double)e.TotalProcessed / e.TotalToProcess;
+        } else if (e.TotalToDownload != 0 && e.TotalToDownload != e.TotalDownloaded) {
+            this.CurrentDownloadProgress = (double)e.TotalDownloaded / e.TotalToDownload;
         }
 
-        this.DownloadStarted = downloadManager.GetDownloadStartTime(AppID);
-        this.DownloadFinished = downloadManager.GetDownloadFinishTime(AppID);
+        this.DownloadSize = DataUnitStrings.GetStringForSize(e.TotalToDownload, DataSizeUnit.Auto_GB_MB_KB_B);
+        this.DiskSize = DataUnitStrings.GetStringForSize(e.TotalToProcess, DataSizeUnit.Auto_GB_MB_KB_B);
+
+
+        this.DownloadStarted = e.DownloadStarted;
+        this.DownloadFinished = e.DownloadFinished;
+        this.EstimatedCompletion = DateTime.Now + e.EstimatedTimeRemaining;
     }
 }

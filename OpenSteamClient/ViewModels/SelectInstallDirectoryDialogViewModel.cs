@@ -7,7 +7,7 @@ using OpenSteamClient.Translation;
 using OpenSteamClient.Views;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSteamworks.Client.Apps;
-using OpenSteamworks.ClientInterfaces;
+using OpenSteamworks.Helpers;
 
 namespace OpenSteamClient.ViewModels;
 
@@ -23,27 +23,35 @@ public partial class SelectInstallDirectoryDialogViewModel : AvaloniaCommon.View
     [ObservableProperty]
     private string? textBlockText;
 
-    private readonly SteamApp app;
+    private readonly IApp app;
     private readonly SelectInstallDirectoryDialog dialog;
-    private readonly ClientApps clientApps;
+    private readonly AppManagerHelper appManagerHelper;
 
-    public SelectInstallDirectoryDialogViewModel(ClientApps clientApps, TranslationManager tm, SelectInstallDirectoryDialog dialog, SteamApp app) {
-        this.clientApps = clientApps;
+    public SelectInstallDirectoryDialogViewModel(AppManagerHelper appManagerHelper, TranslationManager tm, SelectInstallDirectoryDialog dialog, IApp app) {
+        this.appManagerHelper = appManagerHelper;
         this.app = app;
         this.dialog = dialog;
         Title = string.Format(tm.GetTranslationForKey("#SelectInstallDirectoryDialog_Title"), app.Name);
         TextBlockText = string.Format(tm.GetTranslationForKey("#SelectInstallDirectoryDialog_SelectLibraryFolder"), app.Name);
 
-        LibraryFolders = new(LibraryFolderViewModel.GetLibraryFolders(clientApps));
+        LibraryFolders = new(LibraryFolderViewModel.GetLibraryFolders(appManagerHelper));
     }
 
     public void OnCancelClicked() {
         dialog.Close();
     }
-    
+
     public void OnInstallClicked() {
-        Console.WriteLine("Installing " + app.Name + " to " + SelectedLibraryFolder!.Path);
-        clientApps.InstallApp(app.AppID, SelectedLibraryFolder!.ID);
+        if (app is IAppInstallInterface installInterface)
+        {
+            Console.WriteLine("Installing " + app.Name + " to " + SelectedLibraryFolder!.Path);
+            installInterface.Install(SelectedLibraryFolder!.ID);
+        }
+        else
+        {
+            Console.WriteLine("App does not support install! (app: " + app.ToString() + " )");
+        }
+
         dialog.Close();
     }
 }

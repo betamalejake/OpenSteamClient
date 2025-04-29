@@ -50,7 +50,9 @@ public static class ControlExtensions
 
     public static bool TryTranslateSelf(this Control control, bool dueToLayoutChange = false)
     {
-        var tm = AvaloniaApp.Container.Get<Translation.TranslationManager>();
+        if (!AvaloniaApp.Container.TryGet<TranslationManager>(out TranslationManager? tm))
+            return false;
+
         if (tm.CurrentTranslation.Language == ELanguage.None)
         {
             return false;

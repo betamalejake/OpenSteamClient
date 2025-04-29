@@ -1,15 +1,7 @@
 ﻿using Avalonia;
-using OpenSteamworks.KeyValue;
-using OpenSteamworks.KeyValue.ObjectGraph;
-using OpenSteamworks.KeyValue.Deserializers;
-using OpenSteamworks.KeyValue.Serializers;
-using OpenSteamworks.Utils;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using AvaloniaCommon;
 
 namespace OpenSteamClient;
@@ -35,19 +27,18 @@ public static class Program
             AvaloniaApp.DebugEnabled = true;
 #endif
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnExplicitShutdown);
+            Console.WriteLine("Avalonia exited");
         }
         catch (Exception e)
         {
+            if (Debugger.IsAttached)
+                throw;
+
             FatalException(e);
         }
     }
 
     public static void FatalException(Exception e) {
-        if (Debugger.IsAttached)
-        {
-            throw e;
-        }
-
         Console.WriteLine(e.ToString());
         try
         {
@@ -55,9 +46,9 @@ public static class Program
         }
         catch (System.Exception)
         {
-            
+
         }
-        
+
         Environment.FailFast(null, e);
     }
 

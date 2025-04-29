@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Media;
@@ -12,13 +14,14 @@ using CommunityToolkit.Mvvm.Input;
 using OpenSteamworks.Client.Apps;
 using OpenSteamworks.Data.Structs;
 using OpenSteamClient.DI;
+using OpenSteamworks.Client.Apps.Assets;
+using OpenSteamworks.Data.Enums;
 
 namespace OpenSteamClient.ViewModels.Library;
 
 public partial class LibraryAppViewModel : Node
 {
-    public AppBase App { get; init; }
-    protected override string ActualName => App.Name;
+    public IApp App { get; init; }
 
     public LibraryAppViewModel(CGameID gameid)
     {
@@ -26,29 +29,89 @@ public partial class LibraryAppViewModel : Node
         this.IsApp = true;
 
         App = AvaloniaApp.Container.Get<AppsManager>().GetApp(gameid);
-        this.GameID = App.GameID;
+        this.GameID = App.ID;
 
         SetLibraryAssets();
         SetStatusIcon();
-        App.LibraryAssetsUpdated += OnLibraryAssetsUpdated;
-        App.NameChanged += OnNameChanged;
+        CalculateName();
+
+        if (App is IAppAssetsInterface assetsInterface)
+        {
+            assetsInterface.AssetUpdated += OnLibraryAssetUpdated;
+        }
+
+        App.PropertyChanged += App_OnPropertyChanged;
     }
 
-    private void OnNameChanged(object? sender, EventArgs e)
+    private void App_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        OnPropertyChanged(nameof(Name));
+        if (e.PropertyName is nameof(App.Name) or nameof(App.State))
+        {
+            CalculateName();
+        }
+    }
+
+    private void CalculateName()
+    {
+        string name = App.Name;
+        bool isColored = true;
+
+        if (App.State.HasFlag(EAppState.Uninstalling))
+        {
+            name += " - Uninstalling";
+        } else if (App.State.HasFlag(EAppState.MovingFolder))
+        {
+            name += " - Moving";
+        } else if (App.State.HasFlag(EAppState.Terminating))
+        {
+            name += " - Stopping";
+        } else if (App.State.HasFlag(EAppState.AppRunning))
+        {
+            name += " - Running";
+        } else if (App.State.HasFlag(EAppState.UpdateRunning))
+        {
+            //TODO: This should be in the format of "- {updateProgressPct}%"
+            name += " - Update Running";
+        } else if (App.State.HasFlag(EAppState.UpdatePaused))
+        {
+            name += " - Update Paused";
+        } else if (App.State.HasFlag(EAppState.UpdateQueued))
+        {
+            name += " - Update Queued";
+        } else if (App.State.HasFlag(EAppState.UpdateRequired))
+        {
+            name += " - Update Required";
+        } else if (App.State.HasFlag(EAppState.UpdatePaused))
+        {
+            name += " - Update Paused";
+        }
+        else
+        {
+            isColored = false;
+        }
+
+        Name = name;
+
+        //TODO: Not ideal, we can't use theme default
+        Foreground = isColored ? Brushes.Aquamarine : Brushes.White;
     }
 
     private void SetLibraryAssets()
     {
+        string? localIconPath = null;
+        if (App is IAppAssetsInterface assetsInterface)
+        {
+            localIconPath = assetsInterface.Assets.FirstOrDefault(a => a.Type == ELibraryAssetType.Icon)?.LocalPath;
+        }
+
         // Constructing an ImageBrush needs to happen on the main thread (strange design but sure, whatever)
         AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Send, () =>
         {
-            if (App.LocalIconPath != null)
+            if (!string.IsNullOrEmpty(localIconPath))
             {
                 this.Icon = new ImageBrush()
                 {
-                    Source = new Bitmap(App.LocalIconPath),
+                    Source = new Bitmap(localIconPath),
                 };
             }
             else
@@ -61,14 +124,11 @@ public partial class LibraryAppViewModel : Node
     private void SetStatusIcon()
     {
         StatusIcon = Brushes.Transparent;
-        if (App is SteamApp SApp)
-        {
-            
-        }
+        //TODO: Cloud save icon
     }
 
-    public void OnLibraryAssetsUpdated(object? sender, EventArgs e)
+    public void OnLibraryAssetUpdated(object? sender, IAppAssetsInterface.AssetEventArgs assetEventArgs)
     {
-        Dispatcher.UIThread.Invoke(() => SetLibraryAssets());
+        Dispatcher.UIThread.Invoke(SetLibraryAssets);
     }
 }

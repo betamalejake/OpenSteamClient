@@ -1,24 +1,17 @@
-using System;
-using System.IO;
 using System.IO.Compression;
-using System.Reflection;
 using Microsoft.Extensions.FileProviders;
 using OpenSteamworks.Generated;
 using OpenSteamworks.Extensions;
 using System.Security.Cryptography;
 using OpenSteamworks.Client.Utils;
-using System.Formats.Tar;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using OpenSteamworks.Client.Managers;
 using System.Runtime.InteropServices;
 using OpenSteamworks.Client.Config;
-using OpenSteamClient.DI;
 using OpenSteamworks.Utils;
-using OpenSteamworks.KeyValue;
 using OpenSteamworks.KeyValue.ObjectGraph;
 using OpenSteamworks.KeyValue.Deserializers;
-using OpenSteamworks.KeyValue.Serializers;
 using System.Collections.ObjectModel;
 using OpenSteamClient.Logging;
 using OpenSteamClient.DI.Lifetime;
@@ -43,12 +36,12 @@ public class Bootstrapper {
     private InstallManager installManager;
     public string SteamclientLibPath {
         get {
-            return Path.Combine(MainBinaryDir, OpenSteamworks.Client.Utils.OSSpecifics.Instance.SteamClientBinaryName);
+            return Path.Combine(MainBinaryDir, OSSpecifics.Instance.SteamClientBinaryName);
         }
     }
     public string PlatformClientManifest {
         get {
-            return OpenSteamworks.Client.Utils.OSSpecifics.Instance.SteamClientManifestName;
+            return OSSpecifics.Instance.SteamClientManifestName;
         }
     }
     public string PackageDir => Path.Combine(installManager.InstallDir, "package");
@@ -67,7 +60,7 @@ public class Bootstrapper {
 
     [SupportedOSPlatform("linux")]
     public string Ubuntu12_64Dir => Path.Combine(installManager.InstallDir, "ubuntu12_64");
-    
+
     //TODO: make this into an interface so clients can decide what packages they want
     private bool IsPackageBlacklisted(string packageName) {
         if (packageName.StartsWith("tenfoot_")) {
@@ -108,7 +101,7 @@ public class Bootstrapper {
     private readonly ConfigManager configManager;
 
     public Bootstrapper(InstallManager installManager, ILoggerFactory loggerFactory, BootstrapperState bootstrapperState, ConfigManager configManager) {
-        this.logger = loggerFactory.CreateLogger("Bootstrapper");
+        logger = loggerFactory.CreateLogger("Bootstrapper");
         this.installManager = installManager;
         this.bootstrapperState = bootstrapperState;
         this.configManager = configManager;
@@ -126,6 +119,7 @@ public class Bootstrapper {
         // So that leaves us no way to "transfer" the debugger from the old process to the new one, unlike with the old C++ solution where gdb just does it when execvp:ing
         if (Debugger.IsAttached) {
             hadDebugger = true;
+            logger.Warning("Please detach your debugger. You should re-attach once the process has restarted.");
 			progressHandler?.Report(new("Detach your debugger", "To continue, detach your debugger."));
             Debugger.Log(5, "DetachDebugger", "Please detach your debugger. You should re-attach once the process has restarted.");
             await Task.Run(() =>
@@ -138,7 +132,7 @@ public class Bootstrapper {
         }
 
         if (OperatingSystem.IsLinux()) {
-            this.ReExecWithEnvs(hadDebugger);
+            ReExecWithEnvs(hadDebugger);
         } else if (OperatingSystem.IsWindows()) {
             // Poor hack, windows sucks.
             // - Will have 2 processes running simultaneously (lots of problems)
@@ -156,7 +150,7 @@ public class Bootstrapper {
         if (progressHandler == null) {
             progressHandler = new Progress<OperationProgress>();
         }
-		
+
         progressHandler.Report(new("Bootstrapping"));
 
         if (OperatingSystem.IsWindows()) {
@@ -173,7 +167,7 @@ public class Bootstrapper {
         } else {
             msgBoxProvider("Unsupported OS", "Only Windows 10 and Arch Linux are supported.");
         }
-        
+
         try
         {
             using (HttpResponseMessage resp = await Client.HttpClient.GetAsync(bootstrapperState.LocalPackageServerURL+PlatformClientManifest))
@@ -191,12 +185,12 @@ public class Bootstrapper {
                 }
             }
         }
-        catch (System.Exception e)
+        catch (Exception e)
         {
             logger.Debug("Not using local package server, error occurred:");
             logger.Debug(e.ToString());
         }
-        
+
         // steamclient blindly dumps certain files to the CWD, so set it to the install dir
         Directory.SetCurrentDirectory(installManager.InstallDir);
 
@@ -208,7 +202,7 @@ public class Bootstrapper {
             while (true)
             {
                 processes = Process.GetProcessesByName("OpenSteamClient").Where(p => p.Id != Environment.ProcessId);
-                
+
                 if (!processes.Any()) {
                     break;
                 } else {
@@ -224,10 +218,10 @@ public class Bootstrapper {
                         break;
                     }
                 }
-				
+
 				progressHandler.Report(new("Bootstrapping", "Waiting for previous instances to terminate"));
 				Logger.GeneralLogger.Trace("Waiting for OpenSteamClient to terminate");
-				await Task.Delay(1000);                
+				await Task.Delay(1000);
             }
 
             // Blacklist these as well so we don't get file lock errors in the bootstrapper
@@ -240,24 +234,21 @@ public class Bootstrapper {
 
 				progressHandler.Report(new("Bootstrapping", "Waiting for previous instances to terminate"));
 				Logger.GeneralLogger.Trace("Waiting for steamerroreporter to terminate");
-				await Task.Delay(1000);   
+				await Task.Delay(1000);
             }
         }
 
         // Linux only hack.
         if (OperatingSystem.IsLinux()) {
-            IEnumerable<Process> processes;
-            while (true)
+	        while (true)
             {
-                processes = Process.GetProcessesByName("steamserviced");
-                
-                if (!processes.Any()) {
+                if (!Process.GetProcessesByName("steamserviced").Any()) {
                     break;
                 }
 
                 progressHandler.Report(new("Bootstrapping", "Waiting for previous instances to terminate"));
 				Logger.GeneralLogger.Trace("Waiting for steamserviced to terminate");
-				await Task.Delay(1000);   
+				await Task.Delay(1000);
             }
         }
 
@@ -338,13 +329,13 @@ public class Bootstrapper {
                         string pidstr = File.ReadAllText(steampidPath);
                         if (!Process.GetProcessById(int.Parse(pidstr)).HasExited) {
                             // Sure, whatever.
-                            // I've heard exceptions as control flow is a bad idea. 
+                            // I've heard exceptions as control flow is a bad idea.
                             throw new Exception("Steam is still alive");
                         }
                     }
 
                 }
-                catch (System.Exception)
+                catch (Exception)
                 {
                     // Previous instance has exited, safe to proceed
                     File.WriteAllText(steampidPath, Environment.ProcessId.ToString());
@@ -439,7 +430,7 @@ public class Bootstrapper {
                 } else {
                     logger.Info("Not linking steamapps from ValveSteam, as it already exists.");
                 }
-                
+
                 bootstrapperState.LastConfigLinkSuccess = true;
             } else if (!File.Exists(valveSteamPath) && bootstrapperState.LastConfigLinkSuccess) {
                 // ValveSteam was deleted, remove libraryfolders.vdf link and copy over our backup (steam will auto fix the folders if they're broken)
@@ -477,7 +468,7 @@ public class Bootstrapper {
         // Currently only linux needs a restart (for LD_PRELOAD and LD_LIBRARY_PATH from the runtime and our libs)
         var hasReran = UtilityFunctions.GetEnvironmentVariable("OPENSTEAM_RAN_EXECVP") == "1";
         restartRequired = OperatingSystem.IsLinux() && !hasReran;
-        
+
         SetEnvsForSteamLoad();
 		progressHandler.Report(new("Bootstrapping Completed" + (restartRequired ? ", restarting" : "")));
 
@@ -496,9 +487,9 @@ public class Bootstrapper {
                 await Task.Run(() =>
                 {
                     while (!Debugger.IsAttached)
-                    { 
+                    {
                         logger.Info("Waiting for debugger...");
-                        System.Threading.Thread.Sleep(500);
+                        Thread.Sleep(500);
                     }
                 });
             }
@@ -533,9 +524,6 @@ public class Bootstrapper {
         }
         UtilityFunctions.SetEnvironmentVariable("OPENSTEAM_RAN_EXECVP", "1");
 
-        // export STEAM_RUNTIME_LIBRARY_PATH="$("/home/onni/.local/share/OpenSteam/ubuntu12_32/steam-runtime/run.sh" --print-steam-runtime-library-paths)"
-        // export LD_LIBRARY_PATH="$STEAM_RUNTIME_LIBRARY_PATH"
-
         var runtimeProcess = new Process();
         runtimeProcess.StartInfo.FileName = $"{Ubuntu12_32Dir}/steam-runtime/run.sh";
         runtimeProcess.StartInfo.Arguments = "--print-steam-runtime-library-paths";
@@ -547,8 +535,15 @@ public class Bootstrapper {
         runtimeProcess.WaitForExit();
         string runtimeLibraryPath = runtimeProcess.StandardOutput.ReadToEnd();
         UtilityFunctions.SetEnvironmentVariable("STEAM_RUNTIME_LIBRARY_PATH", runtimeLibraryPath);
-        UtilityFunctions.SetEnvironmentVariable("LD_LIBRARY_PATH", $"{Path.Combine(installManager.InstallDir, "ubuntu12_64")}:{Path.Combine(installManager.InstallDir, "ubuntu12_32")}:{Path.Combine(installManager.InstallDir)}:{runtimeLibraryPath}");
-        
+        var ld_lib_path =
+            $"{Path.Combine(installManager.InstallDir, "ubuntu12_64")}:{Path.Combine(installManager.InstallDir, "ubuntu12_32")}:{Path.Combine(installManager.InstallDir)}:{runtimeLibraryPath}";
+
+        UtilityFunctions.SetEnvironmentVariable("LD_LIBRARY_PATH", ld_lib_path);
+
+        Console.WriteLine($"LD_LIBRARY_PATH=\"{ld_lib_path}\"");
+        Console.WriteLine($"STEAM_RUNTIME_LIBRARY_PATH=\"{runtimeLibraryPath}\"");
+        Console.Out.Flush();
+
         string?[] fullArgs = Environment.GetCommandLineArgs();
 
         string executable = Directory.ResolveLinkTarget("/proc/self/exe", false)!.FullName;
@@ -563,7 +558,7 @@ public class Bootstrapper {
         } else {
             fullArgs = fullArgs.Prepend(executable).Append(null).ToArray();
         }
-        
+
         foreach (var item in fullArgs)
         {
             logger.Debug("Re-exec argument: " + item);
@@ -582,10 +577,10 @@ public class Bootstrapper {
        UtilityFunctions.SetEnvironmentVariable("ValvePlatformMutex", installManager.InstallDir.ToLowerInvariant());
        UtilityFunctions.SetEnvironmentVariable("BREAKPAD_DUMP_LOCATION", Path.Combine(installManager.InstallDir, "dumps"));
     }
-    
+
     private bool VerifyFiles(IProgress<OperationProgress> progressHandler, out IEnumerable<string> failureReason) {
         var failureReasons = new List<string>();
-        // Verify all files and skip this step if files are valid and version matches 
+        // Verify all files and skip this step if files are valid and version matches
         bool failedSteamVer = bootstrapperState.InstalledVersion != VersionInfo.STEAM_MANIFEST_VERSION;
         bool failedCommit = bootstrapperState.CommitHash != GitInfo.GitCommit;
         bool failed =  failedSteamVer || failedCommit;
@@ -600,9 +595,9 @@ public class Bootstrapper {
         }
         int installedFilesLength = bootstrapperState.InstalledFiles.Count;
         int checkedFiles = 0;
-		
+
         progressHandler.Report(new("Checking files"));
-        
+
         foreach (var installedFile in bootstrapperState.InstalledFiles)
         {
             if (failed) {
@@ -634,7 +629,7 @@ public class Bootstrapper {
 			progressHandler.Report(new("Checking files", string.Empty, 100));
 			return true;
         }
-        
+
         return false;
     }
 
@@ -642,7 +637,7 @@ public class Bootstrapper {
         downloadedPackages.Clear();
 
         // Fetch the manifests from OpenSteamworks.dll
-        var embeddedProvider = new EmbeddedFileProvider(typeof(SteamClient).Assembly);
+        var embeddedProvider = new EmbeddedFileProvider(typeof(ISteamClient).Assembly);
         IFileInfo fileInfo = embeddedProvider.GetFileInfo($"{PlatformClientManifest}.vdf");
         if (!fileInfo.Exists) {
             throw new Exception($"Cannot find {PlatformClientManifest}.vdf as an embedded resource.");
@@ -763,7 +758,7 @@ public class Bootstrapper {
     }
 
     private readonly static ReadOnlyCollection<string> blacklistedFiles = new(new List<string>() {
-       
+
     });
 
     private async Task ExtractPackages(IProgress<OperationProgress> progressHandler) {
@@ -783,15 +778,15 @@ public class Bootstrapper {
             }
         }
     }
-    
-    [SupportedOSPlatform("linux")] 
+
+    [SupportedOSPlatform("linux")]
     private async Task CheckSteamRuntime(IProgress<OperationProgress> progressHandler) {
         await CheckSteamRuntimeSingle(progressHandler, Ubuntu12_32Dir);
         try
         {
             await CheckSteamRuntimeSingle(progressHandler, Ubuntu12_64Dir, "sniper");
         }
-        catch (System.Exception e)
+        catch (Exception e)
         {
             logger.Warning("Failed to process optional runtimes (sniper):");
             logger.Warning(e);
@@ -911,7 +906,7 @@ public class Bootstrapper {
                 }
             }
         }
-        
+
 		Process proc = new();
 		proc.StartInfo.FileName = "tar";
 		proc.StartInfo.Arguments = $"-xvJf steam-runtime{flavourPrefix}.tar.xz -C steam-runtime{flavourPrefix} --strip-components=1";
@@ -951,7 +946,7 @@ public class Bootstrapper {
         if (assemblyFolder == null) {
             throw new Exception("assemblyFolder is null.");
         }
-        
+
         string platformStr;
         if (OperatingSystem.IsWindows()) {
             platformStr = "win-x64";
@@ -982,7 +977,7 @@ public class Bootstrapper {
         {
             var source = Path.Combine(nativesFolder, pathMapping.Key);
             var target = Path.Combine(installManager.InstallDir, pathMapping.Value);
-        
+
             if (!File.Exists(source)) {
                 logger.Debug("File " + source + " does not exist.");
                 continue;

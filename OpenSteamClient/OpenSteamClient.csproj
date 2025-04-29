@@ -13,19 +13,18 @@
     <!-- Supported runtimes (https://learn.microsoft.com/en-us/dotnet/core/rid-catalog) -->
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
 
-	<PublishAot>true</PublishAot>
-	<IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
+    <PublishAot>true</PublishAot>
+    <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
 
-	<TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
   </PropertyGroup>
 
   <ItemGroup>
-	<Compile Remove="Views/Debugging/Borked/**"/>
-	<AvaloniaXaml Remove="Views/Debugging/Borked/**"/>
+    <Compile Remove="Views/Debugging/Borked/**"/>
+    <AvaloniaXaml Remove="Views/Debugging/Borked/**"/>
 
     <PackageReference Include="QRCoder" Version="1.4.3" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.0.6" />
-	<PackageReference Include="OpenSteamworks" Version="$(CommonOSWVersion)"/>
   </ItemGroup>
 
   <ItemGroup>
@@ -34,9 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
-    
+
     <Content Include="Translations\**">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

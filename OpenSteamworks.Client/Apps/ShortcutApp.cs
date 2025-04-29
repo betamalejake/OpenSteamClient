@@ -1,98 +1,75 @@
+using System.ComponentModel;
 using System.Diagnostics;
-using OpenSteamworks.Data.Enums;
-using OpenSteamworks.Protobuf;
-using OpenSteamworks.Data.Structs;
-using OpenSteamworks.Utils;
+using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSteamworks.Data;
+using OpenSteamworks.Data.Enums;
+using OpenSteamworks.Data.Structs;
+using OpenSteamworks.Generated;
+using OpenSteamworks.Helpers;
 
 namespace OpenSteamworks.Client.Apps;
 
-public class ShortcutApp : AppBase {
-    public class LaunchOption : ILaunchOption
+internal sealed class ShortcutApp : ObservableObject, IApp, IAppLaunchInterface
+{
+	public CGameID ID { get; }
+
+	/// <summary>
+	/// Internal appid used to interface with IClientShortcuts.
+	/// </summary>
+	private readonly AppId_t internalAppID;
+
+	public EAppType Type => EAppType.Shortcut;
+
+	private string name = string.Empty;
+	public string Name
+	{
+		get => name;
+		set => OnRenamed(value);
+	}
+
+	public bool SupportsRename => true;
+	public IApp? ParentApp => null;
+    public EAppState State => EAppState.FullyInstalled;
+
+    private readonly IClientShortcuts shortcuts;
+    private readonly AppManagerHelper _appManagerHelper;
+
+	public ShortcutApp(ISteamClient steamClient, CGameID shortcutGameID)
+	{
+		Trace.Assert(shortcutGameID.IsShortcut());
+
+		this.shortcuts = steamClient.IClientShortcuts;
+        this._appManagerHelper = steamClient.AppManagerHelper;
+		this.ID = shortcutGameID;
+		this.internalAppID = this.shortcuts.GetAppIDForGameID(shortcutGameID);
+	}
+
+	private void OnRenamed(string newName)
+	{
+		OnPropertyChanging(nameof(Name));
+		shortcuts.SetShortcutAppName(internalAppID, newName);
+		name = newName;
+		OnPropertyChanged(nameof(Name));
+	}
+
+    private class ShortcutLaunchOption : ILaunchOption
     {
-        public int ID { get; init; }
-        public string Name { get; init; }
-        public string Description { get; init; }
-        
-        public LaunchOption(int id, string name, string desc) {
-            this.ID = id;
-            this.Name = name;
-            this.Description = desc;
-        }
+        public string Title => "Launch";
+        public string CommandLine => "";
     }
 
-    public void SetName(string newName) {
-        SteamClient.GetIClientShortcuts().SetShortcutAppName(this.ShortcutAppID, newName);
-    }
+    public event EventHandler<LaunchProgressEventArgs>? LaunchProgress;
 
-    protected override string ActualName => ShortcutInfo.AppName;
-    protected override string ActualHeroURL => this.UserSetApp?.HeroURL ?? "";
-    protected override string ActualLogoURL => this.UserSetApp?.LogoURL ?? "";
-    protected override string ActualIconURL => this.UserSetApp?.IconURL ?? "";
-    protected override string ActualPortraitURL => this.UserSetApp?.PortraitURL ?? "";
-    
-    /// <summary>
-    /// We allow the user to set a custom appid for non-steam games. This will be used in the library to provide proton compat data and art for the game, as well as activity feeds. <br/>
-    /// This will NOT allow the user to earn achievements or post activity statuses for the game however.
-    /// </summary>
-    public AppId_t UserSetAppID { get; set; } = 0;
-
-    /// <summary>
-    /// We allow the user to set a custom app type. If unset, defaults to Application and not Game.
-    /// </summary>
-    public EAppType UserSetAppType { get; set; } = EAppType.Application;
-
-    public AppBase? UserSetApp {
-        get {
-            if (UserSetAppID == 0) {
-                return null;
-            }
-
-            return GetAppIfValidGameID(new CGameID(UserSetAppID));
-        }
-    }
-
-    public override IEnumerable<LaunchOption> LaunchOptions => new List<LaunchOption>() { new(0, "", "") };
-    public override int? DefaultLaunchOptionID => 0;
-    public override EAppType Type => UserSetAppType;
-    public override uint StoreAssetsLastModified => 0;
-
-    public override bool IsOwnedAndPlayable => true;
-    public override EAppState State => EAppState.FullyInstalled;
-    public override ILibraryAssetAlignment? LibraryAssetAlignment => null;
-    public CMsgShortcutInfo ShortcutInfo {
-        get {
-			SteamClient.GetIClientShortcuts().GetShortcutInfoByAppID(this.ShortcutAppID, out CMsgShortcutInfo shortcutInfo);
-            return shortcutInfo;
-        }
-    }
-
-    public AppId_t ShortcutAppID { get; init; }
-
-    internal ShortcutApp(AppId_t appidShortcut)
+    public void Launch(ILaunchOption launchOption, ELaunchSource source)
     {
-        this.ShortcutAppID = appidShortcut;
-        this.GameID = CGameID.Zero;
-// #if !_WINDOWS
-//         this.GameID = SteamClient.GetInstance().IPCClientShortcuts.GetGameIDForAppID(appidShortcut);
-// #else
-//         this.GameID = CGameID.Zero;
-// #endif
+        //TODO: Errors and progress
+        shortcuts.LaunchShortcut(internalAppID, source);
     }
 
-    public override async Task<EAppError> Launch(string userLaunchOptions, int launchOption, ELaunchSource launchSource)
-    {
-        await Task.CompletedTask;
-        return SteamClient.GetIClientShortcuts().LaunchShortcut(this.ShortcutAppID, launchOption);
-    }
+    //TODO: Cancel launch
+    public bool Kill() => _appManagerHelper.KillApp(ID);
 
-    public override void PauseUpdate()
-    {
-        
-    }
-
-    public override void Update()
-    {
-        
-    }
+    private ShortcutLaunchOption[] _launchOptions = [new ShortcutLaunchOption()];
+    public IEnumerable<ILaunchOption> LaunchOptions => _launchOptions;
+    public ILaunchOption? DefaultOption => _launchOptions.First();
 }

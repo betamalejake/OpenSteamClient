@@ -19,7 +19,10 @@ public class Translatable : AvaloniaObject
 
     private static void TranslationPropertiesChanged(Visual visual, AvaloniaPropertyChangedEventArgs args)
     {
-        AvaloniaApp.Container.Get<TranslationManager>().TranslateAvaloniaObject(visual);
+        if (AvaloniaApp.Container.TryGet<TranslationManager>(out TranslationManager? tm))
+        {
+            tm.TranslateAvaloniaObject(visual);
+        }
     }
 
     public static readonly AttachedProperty<string> TranslationKeyProperty =

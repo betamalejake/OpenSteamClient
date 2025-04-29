@@ -10,7 +10,7 @@ namespace OpenSteamworks.Client;
 
 public class Logger : ILogger {
     private struct LogData {
-        public Logger logger;
+        public Logger Logger;
         public DateTime Timestamp;
         public LogLevel Level;
         public string Message;
@@ -18,7 +18,7 @@ public class Logger : ILogger {
         public bool FullLine;
 
         public LogData(Logger logger, LogLevel level, string msg, string category, bool fullLine) {
-            this.logger = logger;
+            this.Logger = logger;
             this.Timestamp = DateTime.Now;
             this.Level = level;
             this.Message = msg;
@@ -29,20 +29,20 @@ public class Logger : ILogger {
 
     public static ILogger GeneralLogger {
         get {
-            if (GeneralLoggerOverride != null) {
-                return GeneralLoggerOverride;
+            if (s_generalLoggerOverride != null) {
+                return s_generalLoggerOverride;
             }
 
-            return LazyGeneralLogger.Value;
+            return s_lazyGeneralLogger.Value;
         }
 
         internal set {
-            GeneralLoggerOverride = value;
+            s_generalLoggerOverride = value;
         }
     }
 
-    private static ILogger? GeneralLoggerOverride;
-    private readonly static Lazy<ILogger> LazyGeneralLogger = new(() => new Logger("General"));
+    private static ILogger? s_generalLoggerOverride;
+    private readonly static Lazy<ILogger> s_lazyGeneralLogger = new(() => new Logger("General"));
 
     public string Name { get; set; } = "";
     public string? LogfilePath { get; init; } = null;
@@ -55,19 +55,19 @@ public class Logger : ILogger {
     /// <summary>
     /// If this logger is a sublogger, this is it's name.
     /// </summary>
-    private string subLoggerName { get; set; } = "";
+    private string SubLoggerName { get; set; } = "";
 
     /// <summary>
     /// If this logger is a sublogger, this is it's parent.
     /// </summary>
-    private Logger? parentLogger { get; set; }
+    private Logger? ParentLogger { get; set; }
 
     // https://no-color.org/
-    private static bool disableColors = Environment.GetEnvironmentVariable("NO_COLOR") != null;
-    private object logStreamLock = new();
-    private FileStream? logStream;
-    private static List<Logger> loggers = new();
-    private static readonly Thread logThread;
+    private static bool s_disableColors = Environment.GetEnvironmentVariable("NO_COLOR") != null;
+    private object _logStreamLock = new();
+    private FileStream? _logStream;
+    private static List<Logger> s_loggers = new();
+    private static readonly Thread s_logThread;
 
     public class DataReceivedEventArgs : EventArgs {
         public LogLevel Level { get; set; }
@@ -87,16 +87,16 @@ public class Logger : ILogger {
     public static event EventHandler<DataReceivedEventArgs>? DataReceived;
 
     static Logger() {
-        logThread = new(LogThreadMain);
-        logThread.Name = "LogThread";
-        logThread.Start();
+        s_logThread = new(LogThreadMain);
+        s_logThread.Name = "LogThread";
+        s_logThread.Start();
     }
 
     private Logger(string name, string? filepath = "") {
         this.Name = name;
         this.LogfilePath = filepath;
 
-        loggers.Add(this);
+        s_loggers.Add(this);
         if (!string.IsNullOrEmpty(filepath)) {
             if (File.Exists(filepath)) {
                 // Delete if over 4MB
@@ -105,36 +105,36 @@ public class Logger : ILogger {
                     fi.Delete();
                 }
             }
-            logStream = File.Open(filepath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
-            logStream.Seek(logStream.Length, SeekOrigin.Begin);
+            _logStream = File.Open(filepath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+            _logStream.Seek(_logStream.Length, SeekOrigin.Begin);
         }
-        
-        if (!hasRanWindowsHack && OperatingSystem.IsWindows()) {
+
+        if (!s_hasRanWindowsHack && OperatingSystem.IsWindows()) {
             RunWindowsConsoleColorsHack();
         }
     }
 
-    private static readonly ConcurrentQueue<LogData> dataToLog = new();
+    private static readonly ConcurrentQueue<LogData> s_dataToLog = new();
     private static void LogThreadMain() {
         while (true)
         {
-            if (dataToLog.IsEmpty) {
-                System.Threading.Thread.Sleep(50);
+            if (s_dataToLog.IsEmpty) {
+                Thread.Sleep(1);
                 continue;
             }
 
-            if (dataToLog.TryDequeue(out LogData data)) {
+            if (s_dataToLog.TryDequeue(out LogData data)) {
                 if (data.FullLine) {
-                    MessageInternal(data.logger, data.Timestamp, data.Level, data.Message, data.Category);
+                    MessageInternal(data.Logger, data.Timestamp, data.Level, data.Message, data.Category);
                 } else {
-                    WriteInternal(data.logger, data.Message);
+                    WriteInternal(data.Logger, data.Message);
                 }
             }
         }
     }
 
     public static Logger GetLogger(string name, string? filepath = "") {
-        foreach (var item in loggers)
+        foreach (var item in s_loggers)
         {
             if (item.Name == name && item.LogfilePath == filepath) {
                 return item;
@@ -151,26 +151,26 @@ public class Logger : ILogger {
     /// <returns></returns>
     public Logger CreateSubLogger(string subName) {
         var logger = new Logger("", "");
-        logger.subLoggerName = subName;
-        logger.parentLogger = this;
+        logger.SubLoggerName = subName;
+        logger.ParentLogger = this;
         return logger;
     }
 
     private static void MessageInternal(Logger logger, DateTime timestamp, LogLevel level, string message, string category) {
-        if (logger.parentLogger != null) {
-            var actualCategory = logger.subLoggerName;
+        if (logger.ParentLogger != null) {
+            var actualCategory = logger.SubLoggerName;
             if (!string.IsNullOrEmpty(category)) {
                 actualCategory += "/" + category;
             }
-            
-            MessageInternal(logger.parentLogger, timestamp, level, message, actualCategory);
+
+            MessageInternal(logger.ParentLogger, timestamp, level, message, actualCategory);
             return;
         }
 
         string formatted = message;
         if (logger.AddPrefix) {
             // welp. we can't just use the system's date format, but we also need to use the system's time at the same time, which won't include milliseconds and will always have AM/PM appended, even on 24-hour clocks. So use the objectively better formatting system of dd/MM/yyyy and always use 24-hour time (which will also make it easier for the devs reviewing bug reports)
-            formatted = string.Format("[{0} {1}{2}: {3}] {4}", timestamp.ToString("dd/MM/yyyy HH:mm:ss.ff"), logger.Name, string.IsNullOrEmpty(category) ? "" : $"/{category}", level.ToString(), message);
+            formatted = $"[{timestamp:dd/MM/yyyy HH:mm:ss.ff} {logger.Name}{(string.IsNullOrEmpty(category) ? "" : $"/{category}")}: {level.ToString()}] {message}";
         }
 
 		if (!formatted.EndsWith(Environment.NewLine)) {
@@ -180,7 +180,7 @@ public class Logger : ILogger {
         string ansiColorCode = string.Empty;
         string ansiResetCode = string.Empty;
 
-        if (!disableColors) {
+        if (!s_disableColors) {
             ansiResetCode = "\x1b[0m";
             if (level == LogLevel.Fatal) {
                 ansiColorCode = "\x1b[91m";
@@ -197,13 +197,13 @@ public class Logger : ILogger {
 
         Console.Write(ansiColorCode + formatted + ansiResetCode);
 
-        if (logger.logStream != null) {
-            lock (logger.logStreamLock)
+        if (logger._logStream != null) {
+            lock (logger._logStreamLock)
             {
-                logger.logStream.Write(Encoding.UTF8.GetBytes(formatted));
+                logger._logStream.Write(Encoding.UTF8.GetBytes(formatted));
 
                 //TODO: Implement a more robust system with debouncing and/or per lines since last flush
-                logger.logStream.Flush();
+                logger._logStream.Flush();
             }
         }
 
@@ -213,17 +213,17 @@ public class Logger : ILogger {
     private void AddData(LogLevel level, string message) {
 		foreach (var line in message.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
 		{
-			dataToLog.Enqueue(new LogData(this, level, line, string.Empty, true));
+			s_dataToLog.Enqueue(new LogData(this, level, line, string.Empty, true));
 		}
-        
+
     }
 
 	private static void WriteInternal(Logger logger, string message) {
         Console.Write(message);
-        if (logger.logStream != null) {
-            lock (logger.logStreamLock)
+        if (logger._logStream != null) {
+            lock (logger._logStreamLock)
             {
-                logger.logStream.Write(Encoding.Default.GetBytes(message));
+                logger._logStream.Write(Encoding.Default.GetBytes(message));
             }
         }
 
@@ -236,17 +236,17 @@ public class Logger : ILogger {
     }
 
     ~Logger() {
-        loggers.Remove(this);
+        s_loggers.Remove(this);
     }
 
-    private static bool hasRanWindowsHack = false;
+    private static bool s_hasRanWindowsHack = false;
 
     /// <summary>
     /// Windows is stuck using legacy settings unless you tell it explicitly to use "ENABLE_VIRTUAL_TERMINAL_PROCESSING". Why???
     /// </summary>
     [SupportedOSPlatform("windows")]
     private static void RunWindowsConsoleColorsHack() {
-        hasRanWindowsHack = true;
+        s_hasRanWindowsHack = true;
         const int STD_INPUT_HANDLE = -10;
         const int STD_OUTPUT_HANDLE = -11;
         const uint ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
@@ -271,13 +271,13 @@ public class Logger : ILogger {
         if (!GetConsoleMode(iStdIn, out uint inConsoleMode))
         {
             Console.WriteLine("[Windows Console Color Hack] failed to get input console mode");
-            disableColors = true;
+            s_disableColors = true;
             return;
         }
         if (!GetConsoleMode(iStdOut, out uint outConsoleMode))
         {
             Console.WriteLine("[Windows Console Color Hack] failed to get output console mode");
-            disableColors = true;
+            s_disableColors = true;
             return;
         }
 
@@ -287,14 +287,14 @@ public class Logger : ILogger {
         if (!SetConsoleMode(iStdIn, inConsoleMode))
         {
             Console.WriteLine($"[Windows Console Color Hack] failed to set input console mode, error code: {GetLastError()}");
-            disableColors = true;
+            s_disableColors = true;
             return;
         }
 
         if (!SetConsoleMode(iStdOut, outConsoleMode))
         {
             Console.WriteLine($"[Windows Console Color Hack] failed to set output console mode, error code: {GetLastError()}");
-            disableColors = true;
+            s_disableColors = true;
             return;
         }
     }

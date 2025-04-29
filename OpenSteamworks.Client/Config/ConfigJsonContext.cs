@@ -1,7 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using OpenSteamworks.Client.Apps.Compat;
-using OpenSteamworks.Client.Apps.Library;
 using OpenSteamworks.Client.Config;
 
 namespace OpenSteamworks.Client;

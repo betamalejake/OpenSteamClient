@@ -1,17 +1,18 @@
 using System.Text.Json;
-using OpenSteamworks.Client.Apps;
-using OpenSteamworks.Client.Config;
 using OpenSteamworks.Client.Enums;
 using OpenSteamworks.Client.Managers;
-using OpenSteamworks.Client.Utils;
 using OpenSteamworks.Data.Enums;
 using OpenSteamworks.Data;
 using OpenSteamworks.Data.Structs;
 using OpenSteamworks.Utils;
 using OpenSteamClient.Logging;
+using OpenSteamworks.Helpers;
+using OpenSteamworks.Messaging;
+using OpenSteamworks.Messaging.SharedConnection;
 
 namespace OpenSteamworks.Client.Apps.Library;
 
+//TODO: Copied from old apps system, needs rewrite and cleanup!
 /// <summary>
 /// The Library is responsible for telling you about the user's categories, and providing facilities to update the categories.
 /// For all other functions (listing all apps the user owns, installing apps, getting app objects, etc) consult AppsManager.
@@ -22,15 +23,21 @@ public class Library
     private readonly ISteamClient steamClient;
     private readonly CloudConfigStore cloudConfigStore;
     private NamespaceData? namespaceData;
-    private readonly AppsManager appsManager;
+    private readonly AppsHelper appsHelper;
     private readonly LoginManager loginManager;
     private readonly InstallManager installManager;
     private readonly ILogger logger;
     private readonly LibraryManager libraryManager;
+    private readonly UserHelper userHelper;
+    private readonly AppManagerHelper appManagerHelper;
+    private readonly ILoggerFactory loggerFactory;
 
     public event EventHandler? LibraryUpdated;
-    internal Library(LibraryManager libraryManager, ISteamClient steamClient, ILoggerFactory loggerFactory, CloudConfigStore cloudConfigStore, LoginManager loginManager, AppsManager appsManager, InstallManager installManager)
+    internal Library(LibraryManager libraryManager, ISteamClient steamClient, ILoggerFactory loggerFactory, CloudConfigStore cloudConfigStore, LoginManager loginManager, AppsHelper appsHelper, InstallManager installManager)
     {
+	    this.loggerFactory = loggerFactory;
+	    this.appManagerHelper = steamClient.AppManagerHelper;
+	    this.userHelper = steamClient.UserHelper;
         this.libraryManager = libraryManager;
         this.Collections.Add(new Collection(libraryManager, "Uncategorized", "uncategorized", true));
         this.installManager = installManager;
@@ -39,7 +46,7 @@ public class Library
         this.cloudConfigStore = cloudConfigStore;
         cloudConfigStore.NamespaceUpdated += OnNamespaceUpdated;
         this.loginManager = loginManager;
-        this.appsManager = appsManager;
+        this.appsHelper = appsHelper;
     }
 
     private void OnNamespaceUpdated(object? sender, EUserConfigStoreNamespace e)
@@ -97,7 +104,8 @@ public class Library
 
         // Add all apps not in any categories to Uncategorized
         var uncategorized = GetCollectionByID("uncategorized");
-        HashSet<CGameID> uncategorizedAppIDs = new(this.appsManager.OwnedAppsAsGameIDs);
+        var ownedAppsAsGameIDs = userHelper.GetSubscribedApps().Select(a => new CGameID(a)).ToHashSet();
+        HashSet<CGameID> uncategorizedAppIDs = new(ownedAppsAsGameIDs);
         uncategorizedAppIDs.SymmetricExceptWith(AppIDsInCollections);
         foreach (var item in uncategorizedAppIDs)
         {
@@ -112,7 +120,7 @@ public class Library
         }
 
         var all = new HashSet<CGameID>(AppIDsInCollections);
-        all.UnionWith(this.appsManager.OwnedAppsAsGameIDs);
+        all.UnionWith(ownedAppsAsGameIDs);
 
         Logger.GeneralLogger.Trace("Firing library updated");
         try
@@ -125,7 +133,7 @@ public class Library
             logger.Error(e);
             throw;
         }
-        
+
         return all;
     }
 
@@ -160,7 +168,7 @@ public class Library
             logger.Info("Have filters " + string.Join(",", collection.StateFilter.FilterOptions));
         } else {
             // Begin by adding all apps the user has
-            apps.UnionWith(this.appsManager.OwnedApps);
+            apps.UnionWith(userHelper.GetSubscribedApps());
         }
 
         foreach (ELibraryAppStateFilter opt in collection.StateFilter.FilterOptions)
@@ -168,19 +176,19 @@ public class Library
             switch (opt)
             {
                 case ELibraryAppStateFilter.InstalledLocally:
-                    UnionOrIntersect(ref apps, appsManager.InstalledApps, union);
+                    UnionOrIntersect(ref apps, appManagerHelper.GetInstalledApps(), union);
                     union = false;
                     break;
                 case ELibraryAppStateFilter.ReadyToPlay:
-                    UnionOrIntersect(ref apps, appsManager.ReadyToPlayApps, union);
+                    UnionOrIntersect(ref apps, appManagerHelper.GetReadyToPlayApps(), union);
                     union = false;
                     break;
                 case ELibraryAppStateFilter.Played:
-                    UnionOrIntersect(ref apps, appsManager.PlayedApps, union);
+                    UnionOrIntersect(ref apps, userHelper.PlayedApps, union);
                     union = false;
                     break;
                 case ELibraryAppStateFilter.Unplayed:
-                    UnionOrIntersect(ref apps, appsManager.UnplayedApps, union);
+                    UnionOrIntersect(ref apps, userHelper.GetSubscribedApps().Except(userHelper.PlayedApps).ToHashSet(), union);
                     union = false;
                     break;
 
@@ -214,7 +222,7 @@ public class Library
                 foreach (var friendAccountID in collection.FriendsInCommonFilter.FilterOptions)
                 {
                     CSteamID steamid = new(friendAccountID, EUniverse.Public, EAccountType.Individual);
-                    var appsFriendOwnsTask = await appsManager.GetAppsForSteamID(steamid);
+                    var appsFriendOwnsTask = await GetSubscribedAppsForSteamID(steamid);
 
                     // An intersection takes the common elements of both arrays and returns them, abandoning all that weren't mentioned in both lists.
                     apps = apps.Intersect(appsFriendOwnsTask).ToHashSet();
@@ -227,6 +235,33 @@ public class Library
         }
 
         return apps;
+    }
+
+    //TODO: This should be in helpers!!!
+    public async Task<IEnumerable<AppId_t>> GetSubscribedAppsForSteamID(CSteamID steamid, bool includeSteamPackageGames = false, bool includeFreeGames = true)
+    {
+	    logger.Debug("Attempting to get owned apps for " + steamid);
+	    ProtoMsg<Protobuf.CPlayer_GetOwnedGames_Request> request = new("Player.GetOwnedGames#1");
+	    request.Body.Steamid = steamid;
+	    request.Body.IncludeAppinfo = false;
+	    request.Body.IncludeExtendedAppinfo = false;
+	    request.Body.IncludeFreeSub = includeSteamPackageGames;
+	    request.Body.IncludePlayedFreeGames = includeFreeGames;
+
+	    ProtoMsg<Protobuf.CPlayer_GetOwnedGames_Response> response;
+	    HashSet<AppId_t> ownedApps = new();
+
+	    using var conn = new Connection(new SharedConnectionTransport(steamClient, loggerFactory));
+	    response = await conn.SendServiceMethod<Protobuf.CPlayer_GetOwnedGames_Response>(request);
+
+	    foreach (var protoApp in response.Body.Games)
+	    {
+		    // Why the fuck is the AppID field an int here?????
+		    ownedApps.Add((uint)protoApp.Appid);
+	    }
+
+	    logger.Debug(steamid + " owns " + ownedApps.Count + " games");
+	    return ownedApps;
     }
 
 

@@ -13,25 +13,27 @@ namespace OpenSteamworks.Client.Startup;
 public class SteamService : IClientLifetime {
     public event EventHandler? FailedToStartEvent;
     public bool FailedToStart { get; private set; } = false;
-    public bool ShouldStop = false;
+    private bool _shouldStop = false;
     public bool IsRunningAsHost = false;
-    public object CurrentServiceHostLock = new();
-    public Process? CurrentServiceHost;
-    public Thread? WatcherThread;
-    private readonly ISteamClient steamClient;
-    private readonly InstallManager installManager;
-    private readonly AdvancedConfig advancedConfig;
-    private readonly ILogger logger;
+    private readonly object _currentServiceHostLock = new();
+    private Process? _currentServiceHost;
+    private Thread? _watcherThread;
+    private readonly ISteamClient _steamClient;
+    private readonly InstallManager _installManager;
+    private readonly AdvancedConfig _advancedConfig;
+    private readonly ILogger _logger;
+
+    public const int TEST_CONSTANT = 1;
 
     public SteamService(ISteamClient steamClient, InstallManager installManager, ILoggerFactory loggerFactory, AdvancedConfig advancedConfig) {
-        this.logger = loggerFactory.CreateLogger("SteamServiceManager");
-        this.steamClient = steamClient;
-        this.installManager = installManager;
-        this.advancedConfig = advancedConfig;
+        this._logger = loggerFactory.CreateLogger("SteamServiceManager");
+        this._steamClient = steamClient;
+        this._installManager = installManager;
+        this._advancedConfig = advancedConfig;
     }
 
     private void OnFailedPermanently(object? sender, EventArgs e) {
-        ShouldStop = true;
+        _shouldStop = true;
         FailedToStart = true;
         FailedToStartEvent?.Invoke(this, EventArgs.Empty);
     }
@@ -41,48 +43,47 @@ public class SteamService : IClientLifetime {
     [SupportedOSPlatform("osx")]
     public void StartServiceAsHost(string pathToHost) {
         FailedToStart = false;
-        lock (CurrentServiceHostLock)
+        lock (_currentServiceHostLock)
         {
             IsRunningAsHost = true;
-            CurrentServiceHost = new Process();
-            CurrentServiceHost.StartInfo.WorkingDirectory = Path.GetDirectoryName(pathToHost);
-            CurrentServiceHost.StartInfo.FileName = pathToHost;
-            
+            _currentServiceHost = new Process();
+            _currentServiceHost.StartInfo.WorkingDirectory = Path.GetDirectoryName(pathToHost);
+            _currentServiceHost.StartInfo.FileName = pathToHost;
+
             if (OperatingSystem.IsLinux()) {
-                CurrentServiceHost.StartInfo.Environment.Add("LD_LIBRARY_PATH", $".:{Environment.GetEnvironmentVariable("LD_LIBRARY_PATH")}");
-                CurrentServiceHost.StartInfo.Environment.Add("OPENSTEAM_PID", Environment.ProcessId.ToString());
+                _currentServiceHost.StartInfo.Environment.Add("LD_LIBRARY_PATH", $".:{Environment.GetEnvironmentVariable("LD_LIBRARY_PATH")}");
+                _currentServiceHost.StartInfo.Environment.Add("OPENSTEAM_PID", Environment.ProcessId.ToString());
             }
 
 
             if (OperatingSystem.IsWindows()) {
-                CurrentServiceHost.StartInfo.Verb = "runas";
-                CurrentServiceHost.StartInfo.UseShellExecute = true;
+                _currentServiceHost.StartInfo.Verb = "runas";
+                _currentServiceHost.StartInfo.UseShellExecute = true;
             }
 
-            CurrentServiceHost.Start();
-            if (WatcherThread == null || !WatcherThread.IsAlive) {
-                WatcherThread = new Thread(() => {
+            _currentServiceHost.Start();
+            if (_watcherThread == null || !_watcherThread.IsAlive) {
+                _watcherThread = new Thread(() => {
                     do
                     {
-                        if (CurrentServiceHost.HasExited) {
-                            logger.Error("steamserviced crashed! Restarting in 1s.");
+                        if (_currentServiceHost.HasExited) {
+                            _logger.Error("steamserviced crashed! Restarting in 1s.");
                             System.Threading.Thread.Sleep(1000);
-                            CurrentServiceHost.Start();
+                            _currentServiceHost.Start();
                         }
                         System.Threading.Thread.Sleep(50);
-                    } while (!ShouldStop);
-                    CurrentServiceHost.Kill();
-                    WatcherThread = null;
+                    } while (!_shouldStop);
+                    _currentServiceHost.Kill();
+                    _watcherThread = null;
                 });
-                
-                WatcherThread.Start();
+
+                _watcherThread.Start();
             }
         }
     }
 
-    public void StopService() {
-        ShouldStop = true;
-    }
+    public void StopService()
+        => _shouldStop = true;
 
     public async Task RunShutdown(IProgress<OperationProgress> operation) {
         this.StopService();
@@ -91,36 +92,53 @@ public class SteamService : IClientLifetime {
 
     public async Task RunStartup(IProgress<OperationProgress> operation)
     {
-        if (advancedConfig.EnableSteamService) {
-            if (steamClient.ConnectedWith == ConnectionType.NewClient) {
-                if (OperatingSystem.IsLinux()) {
-                    try
-                    {
-                        await Task.Run(() =>
-                        {
-                            File.Copy(Path.Combine(installManager.InstallDir, "libbootstrappershim32.so"), "/tmp/libbootstrappershim32.so", true);
-                        });
-                    }
-                    catch (Exception e)
-                    {
-                        logger.Warning("Failed to copy " + Path.Combine(installManager.InstallDir, "libbootstrappershim32.so") + " to /tmp/libbootstrappershim32.so: " + e.ToString());
-                    }
-                    
-                    this.StartServiceAsHost(Path.Combine(installManager.InstallDir, "steamserviced"));
-                } else if (OperatingSystem.IsWindows()) {
-                    if (advancedConfig.ServiceAsAdminHostOnWindows) {
-                        this.StartServiceAsHost(Path.Combine(installManager.InstallDir, "bin", "steamserviced.exe"));
-                    } else {
-                        // steamclient.dll auto starts the steamservice when needed, so starting the service here explicitly is unneeded. 
-                    }
-                } else {
-                    logger.Warning("Not running Steam Service due to unsupported OS");
-                }
-            } else {
-                logger.Info("Not running Steam Service due to existing client");
-            }
-        } else {
-            logger.Info("Not running Steam Service due to user preference");
-        }
+	    if (!_advancedConfig.EnableSteamService)
+	    {
+		    _logger.Info("Not running Steam Service due to user preference");
+		    return;
+	    }
+
+	    if (_steamClient.IsCrossProcess)
+	    {
+		    _logger.Info("Not running Steam Service due to existing client");
+		    return;
+	    }
+
+	    if (OperatingSystem.IsLinux())
+	    {
+		    try
+		    {
+			    //TODO: This is baaad for security. Someone could technically swap this out from right under us...
+			    // Then again, basically the whole OpenSteamClient should be rewritten...
+			    await Task.Run(() =>
+			    {
+				    File.Copy(Path.Combine(_installManager.InstallDir, "libbootstrappershim32.so"),
+					    "/tmp/libbootstrappershim32.so", true);
+			    });
+		    }
+		    catch (Exception e)
+		    {
+			    _logger.Warning("Failed to copy " +
+			                   Path.Combine(_installManager.InstallDir, "libbootstrappershim32.so") +
+			                   " to /tmp/libbootstrappershim32.so: " + e.ToString());
+		    }
+
+		    this.StartServiceAsHost(Path.Combine(_installManager.InstallDir, "steamserviced"));
+	    }
+	    else if (OperatingSystem.IsWindows())
+	    {
+		    if (_advancedConfig.ServiceAsAdminHostOnWindows)
+		    {
+			    this.StartServiceAsHost(Path.Combine(_installManager.InstallDir, "bin", "steamserviced.exe"));
+		    }
+		    else
+		    {
+			    // steamclient.dll auto starts the steamservice when needed, so starting the service here explicitly is unneeded.
+		    }
+	    }
+	    else
+	    {
+		    _logger.Warning("Not running Steam Service due to unsupported OS");
+	    }
     }
 }

@@ -168,8 +168,8 @@ public class SteamHTML : IClientLifetime
             return;
         }
 
-        Logger.GeneralLogger.Trace("pre: " + initCount.Count);
-        if (initCount.Decrement())
+        using var d = initCount.Decrement(out bool deconstruct);
+        if (deconstruct)
         {
             logger.Info("Freeing IClientHTMLSurface, no surfaces left");
             this.steamClient.IClientHTMLSurface.Shutdown();
@@ -184,7 +184,6 @@ public class SteamHTML : IClientLifetime
                 process.Kill();
             }
         }
-        Logger.GeneralLogger.Trace("post: " + initCount.Count);
     }
 
     public bool CanRun()
@@ -212,7 +211,8 @@ public class SteamHTML : IClientLifetime
             throw new InvalidOperationException("SteamHTML cannot run on this installation.");
         }
 
-        if (initCount.Increment())
+        using var d = initCount.Increment(out bool construct);
+        if (construct)
         {
             logger.Info("Initializing SteamHTML");
 
@@ -220,7 +220,7 @@ public class SteamHTML : IClientLifetime
             {
                 logger.Info("Not running SteamHTML due to it already running");
             }
-            else if (steamClient.ConnectedWith == ConnectionType.ExistingClient)
+            else if (steamClient.IsCrossProcess)
             {
                 //TODO: check for existing steamwebhelper here
                 logger.Info("Not rerunning SteamHTML due to existing client connection");

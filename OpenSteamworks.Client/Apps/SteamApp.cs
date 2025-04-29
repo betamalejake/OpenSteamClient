@@ -1,243 +1,355 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using OpenSteamworks.Client.Apps.Compat;
-using OpenSteamworks.Client.Apps.Sections;
-using OpenSteamworks.Extensions;
-using OpenSteamworks.Client.Utils;
-using OpenSteamworks.Data.Enums;
-using OpenSteamworks.KeyValue;
-using OpenSteamworks.KeyValue.ObjectGraph;
-using OpenSteamworks.KeyValue.Deserializers;
-using OpenSteamworks.KeyValue.Serializers;
-using OpenSteamworks.Data.Structs;
-using OpenSteamworks.Utils;
-using OpenSteamworks.Client.Managers;
-using OpenSteamworks.Data;
-using OpenSteamClient.DI;
+using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSteamClient.Logging;
+using OpenSteamworks.Client.Apps.Assets;
+using OpenSteamworks.Data;
+using OpenSteamworks.Data.Enums;
+using OpenSteamworks.Data.KeyValue;
+using OpenSteamworks.Data.Structs;
+using OpenSteamworks.Exceptions;
+using OpenSteamworks.KeyValue.ObjectGraph;
 
 namespace OpenSteamworks.Client.Apps;
 
-public class SteamApp : AppBase
+internal sealed class SteamApp : ObservableObject, IApp, IAppInfoAccessInterface, IAppConfigInterface, IAppLaunchInterface, IAppAssetsInterface, IAppInstallInterface, IAppInfoUpdateInterface
 {
-    protected override string ActualName => Common.Name;
-    protected override string ActualHeroURL => $"https://cdn.cloudflare.steamstatic.com/steam/apps/{this.AppID}/library_hero.jpg?t={this.Common.StoreAssetModificationTime}";
-    protected override string ActualLogoURL => $"https://cdn.cloudflare.steamstatic.com/steam/apps/{this.AppID}/logo.png?t={this.Common.StoreAssetModificationTime}";
-    protected override string ActualIconURL => $"https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{this.AppID}/{this.Common.Icon}.jpg";
-    protected override string ActualPortraitURL => $"https://cdn.cloudflare.steamstatic.com/steam/apps/{this.AppID}/library_600x900.jpg?t={this.Common.StoreAssetModificationTime}";
-
-    public override uint StoreAssetsLastModified => uint.Parse(this.Common.StoreAssetModificationTime, CultureInfo.InvariantCulture.NumberFormat);
-
-    public AppBase? ParentApp => GetAppIfValidGameID(new CGameID(this.Common.ParentAppID));
-    protected readonly ILogger logger;
-
-    public AppDataCommonSection Common { get; private set; }
+	public AppDataCommonSection Common { get; private set; }
     public AppDataConfigSection Config { get; private set; }
     public AppDataExtendedSection Extended { get; private set; }
-    public AppDataInstallSection Install { get; private set; }
-    public AppDataDepotsSection Depots { get; private set; }
+    public AppDataInstallSection Install { get; private set;}
+    public AppDataDepotsSection Depots { get; private set;}
     public AppDataCommunitySection Community { get; private set; }
     public AppDataLocalizationSection Localization { get; private set; }
 
-    private int? defaultLaunchOptionId;
-    public IEnumerable<AppDataConfigSection.LaunchOption> AllLaunchOptions => this.Config.LaunchOptions;
-    private readonly List<AppDataConfigSection.LaunchOption> filteredLaunchOptions = new();
-    public override IEnumerable<AppDataConfigSection.LaunchOption> LaunchOptions => filteredLaunchOptions.AsEnumerable();
-    public override int? DefaultLaunchOptionID => defaultLaunchOptionId;
-
-    //TODO: check for app playability, eg expired playtests or expired timed trials
-    public override bool IsOwnedAndPlayable => AppsManager.OwnedAppIDs.Contains(this.AppID);
-    public override EAppState State => AppsManager.ClientApps.NativeClientAppManager.GetAppInstallState(AppID);
-    public override ILibraryAssetAlignment? LibraryAssetAlignment => Common.LibraryAssets;
-    public override EAppType Type => AppsManager.ClientApps.NativeClientApps.GetAppType(this.AppID);
-    public IEnumerable<AppId_t> OwnedDLCs => AppsManager.ClientApps.GetOwnedDLCs(this.AppID);
-
-    internal SteamApp(AppId_t appid)
+    [MemberNotNull(nameof(Common))]
+    [MemberNotNull(nameof(Config))]
+    [MemberNotNull(nameof(Extended))]
+    [MemberNotNull(nameof(Install))]
+    [MemberNotNull(nameof(Depots))]
+    [MemberNotNull(nameof(Community))]
+    [MemberNotNull(nameof(Localization))]
+    [MemberNotNull(nameof(Assets))]
+    public void OnAppInfoUpdated(IDictionary<EAppInfoSection, KVObject> appInfo)
     {
-        var sections = AppsManager.ClientApps.GetMultipleAppDataSectionsSync(appid, new EAppInfoSection[] {EAppInfoSection.Common, EAppInfoSection.Config, EAppInfoSection.Extended, EAppInfoSection.Install, EAppInfoSection.Depots, EAppInfoSection.Community, EAppInfoSection.Localization});
-        
-        // The common section should always exist for all app types.
-        if (sections[EAppInfoSection.Common] == null) {
-            throw new NullReferenceException("Common section does not exist for app " + appid);
-        }
-        
-        Common = TryCreateSection(sections[EAppInfoSection.Common], "common", obj => new AppDataCommonSection(obj))!;
-        Config = TryCreateSection(sections[EAppInfoSection.Config], "config", obj => new AppDataConfigSection(obj))!;
-        Extended = TryCreateSection(sections[EAppInfoSection.Extended], "extended", obj => new AppDataExtendedSection(obj));
-        Install = TryCreateSection(sections[EAppInfoSection.Install], "install", obj => new AppDataInstallSection(obj));
-        Depots = TryCreateSection(sections[EAppInfoSection.Depots], "depots", obj => new AppDataDepotsSection(obj));
-        Community = TryCreateSection(sections[EAppInfoSection.Community], "community", obj => new AppDataCommunitySection(obj));
-        Localization = TryCreateSection(sections[EAppInfoSection.Localization], "localization", obj => new AppDataLocalizationSection(obj));
+        Type = _steamClient.AppsHelper.GetAppType(AppID);
+        Common = new AppDataCommonSection(appInfo[EAppInfoSection.Common]);
+        Config = new AppDataConfigSection(appInfo[EAppInfoSection.Config]);
+        Extended = new AppDataExtendedSection(appInfo[EAppInfoSection.Extended]);
+        Install = new AppDataInstallSection(appInfo[EAppInfoSection.Install]);
+        Depots = new AppDataDepotsSection(appInfo[EAppInfoSection.Depots]);
+        Community = new AppDataCommunitySection(appInfo[EAppInfoSection.Community]);
+        Localization = new AppDataLocalizationSection(appInfo[EAppInfoSection.Localization]);
 
-        if (this.Common.GameID.IsValid())
-        {
-            this.GameID = this.Common.GameID;
-        }
-        else
-        {
-            this.GameID = new CGameID(appid);
-        }
+        InitAssets();
 
-        this.logger = AppsManager.GetLoggerForApp(this);
-        PopulateLaunchOptions();
+        var newName = _steamClient.AppsHelper.GetAppLocalizedName(AppID);
+        if (Name != newName)
+        {
+            Name = newName;
+            OnPropertyChanged(nameof(Name));
+        }
     }
 
-    private void PopulateLaunchOptions() {
-        try
+    //TODO: Holdover from the old library system. Get rid of this terribleness
+	public DateTime AssetsLastModified => (DateTime)RTime32.Parse(Common.StoreAssetModificationTime, CultureInfo.InvariantCulture.NumberFormat);
+
+	public CGameID ID { get; }
+	public AppId_t AppID => ID.AppID;
+	public EAppType Type { get; private set; }
+
+	public IApp? ParentApp
+        => Common.ParentAppID != 0 ? _appsManager.GetApp(new CGameID(Common.ParentAppID)) : null;
+
+    public EAppState State => _steamClient.AppManagerHelper.GetAppState(AppID);
+
+    public string Name { get; private set; }
+
+    private readonly ISteamClient _steamClient;
+	private readonly AppsManager _appsManager;
+	private SteamApp(ISteamClient steamClient, AppsManager appsManager, CGameID gameId, IDictionary<EAppInfoSection, KVObject> appInfo)
+	{
+		_steamClient = steamClient;
+		_appsManager = appsManager;
+
+		Trace.Assert(gameId.IsSteamApp());
+
+		ID = gameId;
+
+        OnAppInfoUpdated(appInfo);
+    }
+
+    public void OnAppStateChanged()
+    {
+        OnPropertyChanged(nameof(State));
+    }
+
+    public static IApp Create(ISteamClient steamClient, AppsManager appsManager, CGameID gameid)
+    {
+        var appInfo = steamClient.AppsHelper.GetAppInfo(gameid.AppID, IAppInfoAccessInterface.Sections);
+        return new SteamApp(steamClient, appsManager, gameid, appInfo);
+    }
+
+    public IEnumerable<IAppConfigInterface.ConfigKey> SupportedKeys =>
+    [
+        IAppConfigInterface.ConfigKey.LANGUAGE,
+        IAppConfigInterface.ConfigKey.ACTIVE_BETA,
+        IAppConfigInterface.ConfigKey.ENABLE_OVERLAY,
+        IAppConfigInterface.ConfigKey.COMPAT_TOOL_NAME,
+        IAppConfigInterface.ConfigKey.ENABLE_VR_THEATER,
+        IAppConfigInterface.ConfigKey.ENABLE_STEAM_CLOUD,
+        IAppConfigInterface.ConfigKey.ENABLE_STEAM_INPUT,
+        IAppConfigInterface.ConfigKey.COMPAT_TOOL_CMDLINE,
+        IAppConfigInterface.ConfigKey.LAUNCH_COMMAND_LINE,
+        IAppConfigInterface.ConfigKey.DEFAULT_LAUNCH_OPTION
+    ];
+
+    public bool SetConfigValue(IAppConfigInterface.ConfigKey key, object value)
+	{
+		switch (key)
+		{
+			case IAppConfigInterface.ConfigKey.LAUNCH_COMMAND_LINE:
+				if (value is string launchOptStr)
+				{
+					if (!_steamClient.ConfigStoreHelper.Set(EConfigStore.UserLocal,
+						    $"Software\\Valve\\Steam\\Apps\\{AppID}\\LaunchOptions", launchOptStr))
+					{
+						Logger.GeneralLogger.Error($"SteamApp {AppID}: Failed to set launch command line! (opt: \"{launchOptStr}\")");
+						return false;
+					}
+				}
+
+				break;
+			case IAppConfigInterface.ConfigKey.COMPAT_TOOL_NAME:
+				if (value is string nameStr)
+				{
+					_steamClient.CompatHelper.SetAppCompatTool(AppID, nameStr);
+				}
+
+				break;
+			case IAppConfigInterface.ConfigKey.COMPAT_TOOL_CMDLINE:
+				if (value is string cmdlineStr)
+				{
+					_steamClient.CompatHelper.SetAppCompatTool(AppID, _steamClient.CompatHelper.GetAppCompatTool(AppID) ?? "", cmdlineStr);
+				}
+
+				break;
+			case IAppConfigInterface.ConfigKey.ACTIVE_BETA:
+				if (value is string betaStr)
+				{
+					if (!_steamClient.IClientAppManager.SetActiveBeta(AppID, betaStr))
+					{
+						Logger.GeneralLogger.Error($"SteamApp {AppID}: Failed to set beta! (beta: \"{betaStr}\")");
+						return false;
+					}
+				}
+
+				break;
+			case IAppConfigInterface.ConfigKey.ENABLE_OVERLAY:
+				if (value is bool bEnableOverlay)
+				{
+					if (!_steamClient.IClientUser.SetConfigInt(ERegistrySubTree.Apps, $"{AppID}\\OverlayAppEnable", bEnableOverlay ? 1 : 0))
+					{
+						Logger.GeneralLogger.Error($"SteamApp {AppID}: Failed to set overlay enable state!");
+					}
+
+					return true;
+				}
+
+				break;
+            default:
+                Logger.GeneralLogger.Error($"SteamApp {AppID}: Config option {key} not implemented");
+                break;
+		}
+
+		return false;
+	}
+
+	public bool TryGetConfigValue(IAppConfigInterface.ConfigKey key, [NotNullWhen(true)] out object? value)
+	{
+		switch (key)
+		{
+			case IAppConfigInterface.ConfigKey.LAUNCH_COMMAND_LINE:
+				value = _steamClient.ConfigStoreHelper.Get(EConfigStore.UserLocal,
+					$"Software\\Valve\\Steam\\Apps\\{AppID}\\LaunchOptions", "");
+
+				return true;
+			case IAppConfigInterface.ConfigKey.COMPAT_TOOL_NAME:
+				value = _steamClient.CompatHelper.GetAppCompatTool(AppID) ?? string.Empty;
+				return true;
+			case IAppConfigInterface.ConfigKey.ACTIVE_BETA:
+				value = _steamClient.AppManagerHelper.GetActiveBeta(AppID);
+				return true;
+			case IAppConfigInterface.ConfigKey.ENABLE_OVERLAY:
+				if (!_steamClient.IClientUser.GetConfigInt(ERegistrySubTree.Apps, $"{AppID}\\OverlayAppEnable",
+					    out int val))
+				{
+					Logger.GeneralLogger.Error($"SteamApp {AppID}: Failed to get overlay enable state!");
+					val = 1;
+				}
+
+				value = val;
+				return true;
+		}
+
+		value = null;
+		return false;
+	}
+
+	private sealed class LaunchOption : ILaunchOption
+	{
+		public required uint ID { get; init; }
+		public required string Title { get; init; }
+		public required string CommandLine { get; init; }
+	}
+
+	//TODO: Results
+	public event EventHandler<LaunchProgressEventArgs>? LaunchProgress;
+	public void Launch(ILaunchOption launchOption, ELaunchSource source)
+	{
+		if (launchOption is not LaunchOption steamLaunchOption)
+			throw new ArgumentException(nameof(launchOption));
+
+        LaunchProgress?.Invoke(this, new LaunchProgressEventArgs() {IsLaunching = true, ShortForm = "Launching"});
+		//TODO: No real progress...
+        _steamClient.AppManagerHelper.LaunchApp(ID, steamLaunchOption.ID, source).ContinueWith(t =>
         {
-            foreach (var id in AppsManager.ClientApps.GetValidLaunchOptions(this.AppID))
+            LaunchProgress?.Invoke(this, new LaunchProgressEventArgs() { IsLaunching = false, ShortForm = "Launching", FailureCode = t.IsFaulted ? EResult.Failure : EResult.OK });
+        });
+    }
+
+    public bool Kill()
+    {
+        //TODO: Cancel launch
+        return _steamClient.AppManagerHelper.KillApp(ID);
+    }
+
+	public IEnumerable<ILaunchOption> LaunchOptions
+	{
+		get
+		{
+			var optionIDs = _steamClient.AppsHelper.GetAvailableLaunchOptions(AppID);
+			return Config.LaunchOptions.Where(opt => optionIDs.Contains(opt.ID)).Select(opt => new LaunchOption()
+			{
+				ID = (uint)opt.ID,
+				Title = opt.Description,
+				CommandLine = $"{opt.Executable} {opt.Arguments}".TrimEnd()
+			});
+		}
+	}
+
+    public ILaunchOption? DefaultOption
+    {
+        get
+        {
+            var opts = LaunchOptions.ToList();
+            return opts.Count == 1 ? opts.First() : null;
+        }
+    }
+
+    public event EventHandler<IAppAssetsInterface.AssetEventArgs>? AssetCached;
+	public event EventHandler<IAppAssetsInterface.AssetEventArgs>? AssetUpdated;
+	public IEnumerable<IAppAssetsInterface.ILibraryAsset> Assets { get; private set; }
+
+	[MemberNotNull(nameof(Assets))]
+	private void InitAssets()
+	{
+		var assets = new List<SteamLibraryAssets>();
+
+        if (Common.LibraryAssetsFull != null)
+        {
+            foreach (var type in new[] {ELibraryAssetType.Hero, ELibraryAssetType.Logo, ELibraryAssetType.Portrait})
             {
-                filteredLaunchOptions.Add(Config.LaunchOptions.Where(l => l.ID == id).First());
-            }
-        }
-        catch (System.Exception e)
-        {
-            logger.Error("Error while populating launch options for " + this.AppID);
-            logger.Error(e);
-        }
-
-        if (filteredLaunchOptions.Count == 1) {
-            defaultLaunchOptionId = filteredLaunchOptions.First().ID;
-        }
-    }
-
-    private static T TryCreateSection<T>(KVObject? obj, string sectionName, Func<KVObject, T> factory) where T: TypedKVObject {
-        if (obj == null) {
-            return factory(new KVObject(sectionName, new List<KVObject>()));
-        }
-
-        return factory(obj);
-    }
-    
-    /// <summary>
-    /// Gets the path to the app's install dir.
-    /// </summary>
-    /// <param name="installDir"></param>
-    /// <returns>True if the game is installed, false if it is not installed</returns>
-    public bool TryGetInstallDir([NotNullWhen(true)] out string? installDir) {
-        installDir = null;
-        if (!AppsManager.ClientApps.IsAppInstalled(this.AppID)) {
-            return false;
-        }
-
-        installDir = AppsManager.ClientApps.GetAppInstallDir(this.AppID);
-        if (string.IsNullOrEmpty(installDir)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Gets the path to the app's libray folder's root path "/path/to/SteamLibrary/steamapps/"
-    /// </summary>
-    /// <param name="installDir"></param>
-    /// <returns>True if the game is installed, false if it is not installed</returns>
-    public bool TryGetAppLibraryFolderDir([NotNullWhen(true)] out string? installDir) {
-        installDir = null;
-        if (!AppsManager.ClientApps.IsAppInstalled(this.AppID)) {
-            return false;
-        }
-
-        installDir = AppsManager.ClientApps.GetAppInstallDir(this.AppID);
-        if (string.IsNullOrEmpty(installDir)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    public async Task<ProtonDBInfo> GetProtonDBCompatData() {
-        string response = await Client.HttpClient.GetStringAsync($"https://www.protondb.com/api/v1/reports/summaries/{this.AppID}.json");
-		
-        var json = JsonSerializer.Deserialize(response, JsonContext.Default.ProtonDBInfo);
-        if (json == null) {
-            throw new NullReferenceException("Failed to get compatibility data from ProtonDB");
-        }
-
-        return json;
-    }
-
-    public bool IsCompatEnabled {
-        get {
-            return this.CompatTool != "";
-        }
-
-        set {
-            if (value == true) {
-                AppsManager.SetDefaultCompatToolForApp(this.GameID);
-            } else {
-                AppsManager.DisableCompatToolForApp(this.GameID);
-            }
-        }
-    }
-
-    public string CompatTool {
-        get {
-            return AppsManager.GetCurrentCompatToolForApp(this.GameID);
-        }
-
-        set {
-            AppsManager.SetCompatToolForApp(this.GameID, value);
-        }
-    }
-
-    //TODO: Progress indication
-    public override async Task<EAppError> Launch(string userLaunchOptions, int launchOptionID, ELaunchSource launchSource)
-    {
-        if (this.Config.CheckForUpdatesBeforeLaunch) {
-            logger.Info("Checking for updates (due to CheckForUpdatesBeforeLaunch)");
-            await AppsManager.ClientApps.UpdateAppInfo(AppID);
-            if (!AppsManager.ClientApps.BIsAppUpToDate(AppID)) {
-                logger.Info("Not up to date, aborting launch and queuing update");
-                AppsManager.ClientApps.QueueUpdate(AppID);
-                return EAppError.UpdateRequired;
-            }
-        }
-
-        //TODO:
-        // CheckShaderDepotManifest
-        // DownloadingWorkshop
-        
-
-        logger.Info("Running install scripts");
-        await AppsManager.RunInstallScriptAsync(AppID);
-
-        bool isAnonUser = Client.Instance!.Container.Get<LoginManager>().IsAnonUser;
-        if (!isAnonUser) {
-            if (ClientRemoteStorage.IsCloudEnabledForAppOrAccount(AppID)) {
-                logger.Info("Synchronizing cloud");
-                EResult syncResult = await ClientRemoteStorage.SyncAppPreLaunch(AppID);
-                if (syncResult != EResult.OK && syncResult != EResult.NoResult)
+                var kvType = type switch
                 {
-                    logger.Error("Cloud sync failed: " + syncResult);
-                    throw new Exception("Cloud sync failed: " + syncResult);
+                    ELibraryAssetType.Hero => AppDataCommonSection.LibraryAssetsFullT.AssetType.Hero,
+                    ELibraryAssetType.Logo => AppDataCommonSection.LibraryAssetsFullT.AssetType.Logo,
+                    ELibraryAssetType.Portrait => AppDataCommonSection.LibraryAssetsFullT.AssetType.Portrait,
+                    _ => throw new ArgumentOutOfRangeException(nameof(type))
+                };
+
+                var assetFilename = Common.LibraryAssetsFull.GetAssetFilename(kvType, true, ELanguage.English);
+                if (!string.IsNullOrEmpty(assetFilename))
+                {
+                    object? properties = null;
+                    if (type == ELibraryAssetType.Logo)
+                    {
+                        IAppAssetsInterface.LogoHAlign hAlign = IAppAssetsInterface.LogoHAlign.Center;
+                        IAppAssetsInterface.LogoVAlign vAlign = IAppAssetsInterface.LogoVAlign.Center;
+
+                        switch (Common.LibraryAssetsFull.LogoPinnedPosition)
+                        {
+                            case "BottomLeft":
+                            {
+                                hAlign = IAppAssetsInterface.LogoHAlign.Left;
+                                vAlign = IAppAssetsInterface.LogoVAlign.Bottom;
+                                break;
+                            }
+
+                            case "BottomCenter":
+                            {
+                                hAlign = IAppAssetsInterface.LogoHAlign.Center;
+                                vAlign = IAppAssetsInterface.LogoVAlign.Bottom;
+                                break;
+                            }
+
+                            case "UpperCenter":
+                            {
+                                hAlign = IAppAssetsInterface.LogoHAlign.Center;
+                                vAlign = IAppAssetsInterface.LogoVAlign.Top;
+                                break;
+                            }
+
+                            case "CenterCenter":
+                            {
+                                hAlign = IAppAssetsInterface.LogoHAlign.Center;
+                                vAlign = IAppAssetsInterface.LogoVAlign.Center;
+                                break;
+                            }
+                        }
+
+                        properties = new IAppAssetsInterface.LogoPositionData(
+                                Common.LibraryAssetsFull.LogoWidthPercentage,
+                                Common.LibraryAssetsFull.LogoHeightPercentage, hAlign, vAlign);
+                    }
+
+                    assets.Add(new SteamLibraryAssets(this)
+                    {
+                        Type = type,
+                        Properties = properties,
+                        Uri = new Uri($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{AppID}/{assetFilename}") //TODO: Should this be hardcoded?
+                    });
                 }
             }
-
-            logger.Info("Site license seat checkout");
-            AppsManager.ClientApps.NativeClientUser.CheckoutSiteLicenseSeat(this.AppID);
         }
 
-        if (this.IsCompatEnabled) {
-            logger.Info("Starting compat session (due to IsCompatEnabled == true)");
-            AppsManager.StartCompatSession(this.AppID);
-        }
+        assets.Add(new SteamLibraryAssets(this) {Type = ELibraryAssetType.Icon, Uri = new Uri($"https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{AppID}/{Common.Icon}.jpg")});
+		Assets = assets;
+	}
 
-        logger.Info("Creating process");
-        return AppsManager.ClientApps.NativeClientAppManager.LaunchApp(this.GameID, (uint)launchOptionID, launchSource, "");
-    }
+	private class SteamLibraryAssets(SteamApp app) : IAppAssetsInterface.ILibraryAsset
+	{
+		public required ELibraryAssetType Type { get; init; }
+		public required Uri? Uri { get; init; }
+		public bool NeedsUpdate { get; }
+		public string? LocalPath { get; private set; }
+		public object? Properties { get; init; }
 
-    public override void PauseUpdate()
-    {
-        AppsManager.ClientApps.NativeClientAppManager.SetDownloadingEnabled(false);
-    }
+		public void SetLocalPath(string? path)
+		{
+			app.AssetCached?.Invoke(this, new IAppAssetsInterface.AssetEventArgs(Type));
+			LocalPath = path;
+		}
+	}
 
-    public override void Update()
-    {
-        AppsManager.ClientApps.QueueUpdate(this.AppID);
-    }
+    public override string ToString() => $"SteamApp_{ID}";
+
+    EAppError IAppInstallInterface.Install(LibraryFolder_t folder) => _steamClient.AppManagerHelper.InstallApp(AppID, folder);
+    public EAppError Uninstall() => _steamClient.AppManagerHelper.UninstallApp(AppID);
+    public bool IsInstalled => _steamClient.AppManagerHelper.IsAppInstalled(AppID);
+    public void PauseInstall() => _steamClient.AppManagerHelper.EnableDownloads = false;
+
+    public bool StartUpdate() =>
+        _steamClient.AppManagerHelper.UpdateApp(AppID);
 }

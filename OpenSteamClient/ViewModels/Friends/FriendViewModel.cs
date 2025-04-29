@@ -1,26 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSteamClient.Translation;
 using OpenSteamClient.UIImpl;
-using OpenSteamworks.Client;
 using OpenSteamworks.Client.Apps;
 using OpenSteamworks.Client.Friends;
-using OpenSteamworks.Client.Managers;
 using OpenSteamworks.Data.Enums;
 using OpenSteamworks.Generated;
 using OpenSteamworks.Data.Structs;
-using OpenSteamworks.Utils;
 using OpenSteamClient.Logging;
 using OpenSteamClient.DI;
 
@@ -43,7 +35,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
             return AvatarToAvaloniaBitmap(data, width, height);
         }
     }
-    
+
     public Bitmap? MediumAvatar {
         get {
             var data = Entity.GetMediumAvatar(out uint width, out uint height);
@@ -104,7 +96,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
             return Entity.PersonaState switch
             {
                 EPersonaState.Online => tm.GetTranslationForKey("#FriendsUI_PersonaState_Online"),
-                EPersonaState.Snooze or 
+                EPersonaState.Snooze or
                 EPersonaState.Away => tm.GetTranslationForKey("#FriendsUI_PersonaState_Away"),
                 EPersonaState.Offline => string.Format(tm.GetTranslationForKey("#FriendsUI_LastOnline"), LastOnlineFormat(Entity.LastLogoffTime)),
                 EPersonaState.Invisible => tm.GetTranslationForKey("#FriendsUI_PersonaState_Invisible"),
@@ -113,7 +105,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
         }
     }
 
-    private IntervalFunc? updateLastOnlineTimer;
+    private Timer? updateLastOnlineTimer;
     private void UpdateLastOnlineTimer() {
         var offset = DateTime.UtcNow - Entity.LastLogoffTime;
         TimeSpan updateSpan = TimeSpan.FromMinutes(30);
@@ -121,11 +113,11 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
             updateSpan = TimeSpan.FromSeconds(1);
         }
 
-        updateLastOnlineTimer?.Stop();
-        updateLastOnlineTimer = new(UpdateLastOnline, updateSpan);
+        updateLastOnlineTimer?.Dispose();
+        updateLastOnlineTimer = new(UpdateLastOnline, null, TimeSpan.Zero, updateSpan);
     }
 
-    private void UpdateLastOnline() {
+    private void UpdateLastOnline(object? context) {
         OnPropertyChanged(nameof(PersonaStatus));
     }
 
@@ -205,7 +197,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
     public void HandlePointerPressed(object sender, RoutedEventArgs e) {
         Console.WriteLine("OnPointerPressed");
     }
-    
+
     public FriendEntityViewModel(FriendsUI friendsUI, FriendsManager mgr, FriendsManager.Entity ent)
     {
         this.friendsUI = friendsUI;
@@ -269,7 +261,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
                 games.Add(mgr.CurrentUser.InGame);
             }
         }
-        
+
         if (Entity.InGame.IsValid()) {
             games.Add(Entity.InGame);
         }
@@ -292,11 +284,9 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
                 var app = AvaloniaApp.Container.Get<AppsManager>().GetApp(game);
                 toAdd.Add(new(app.Name, string.Empty));
             }
-            catch (System.Exception e)
+            catch (Exception e)
             {
-                friendsUI.Logger.Error($"Error getting app {game} friend {Entity.SteamID} is playing: ");
-                friendsUI.Logger.Error(e);
-                toAdd.Add(new("Unknown Game", string.Empty));
+                toAdd.Add(new("Unknown Game " + game.Render(), string.Empty));
             }
 
             toAdd.Add(new(string.Empty, "#FriendsUI_InviteToGame", () => InviteToGame(game)));
@@ -440,7 +430,7 @@ public partial class FriendEntityViewModel : AvaloniaCommon.ViewModelBase
         if (change.HasFlag(EPersonaChange.GamePlayed) || change.HasFlag(EPersonaChange.GameServer) || change.HasFlag(EPersonaChange.RichPresence)) {
             UpdateContextMenu();
         }
-    
+
         if (change.HasFlag(EPersonaChange.Avatar)) {
             OnPropertyChanged(nameof(SmallAvatar));
             OnPropertyChanged(nameof(MediumAvatar));

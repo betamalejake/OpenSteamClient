@@ -10,18 +10,18 @@ namespace OpenSteamClient.ViewModels.Library;
 
 public abstract partial class Node : AvaloniaCommon.ViewModelBase, IComparable<Node>
 {
-    // This is real stupid. 
-    // Avalonia breaks if CollectionViewModel (parent) has an override for a bound property, causing binding to fail for all LibraryAppViewModel (children)
-    // So instead, do this hack.
-    // TODO: Stop using TreeView.
-    public string Name => ActualName;
-    protected abstract string ActualName { get; }
+    [ObservableProperty]
+    private string name = string.Empty;
 
     [ObservableProperty]
     private IBrush icon = Brushes.Transparent;
 
     [ObservableProperty]
     private IBrush statusIcon = Brushes.Transparent;
+
+    //TODO: This is really not ideal as light mode users will have light on light text
+    [ObservableProperty]
+    private IBrush foreground = Brushes.White;
 
     [ObservableProperty]
     private bool hasIcon;
@@ -35,7 +35,8 @@ public abstract partial class Node : AvaloniaCommon.ViewModelBase, IComparable<N
     public ObservableCollectionEx<Node> Children { get; protected set; } = new();
     public CGameID GameID { get; protected set; }
 
-    public Node() {
+    public Node()
+    {
         Children.CollectionChanged += OnChildrenChanged;
     }
 
@@ -50,16 +51,17 @@ public abstract partial class Node : AvaloniaCommon.ViewModelBase, IComparable<N
     }
 
     public string GetSortableName() {
-        if (!this.IsApp) {
+        if (!this.IsApp || this is not LibraryAppViewModel libraryAppViewModel) {
             return this.Name;
         }
 
-        if (this.Name.StartsWith("A ")) {
-            return this.Name.Replace("A ", "");
-        } else if (this.Name.StartsWith("The ")) {
-            return this.Name.Replace("The ", "");
+        var name = libraryAppViewModel.App.Name;
+        if (name.StartsWith("A ")) {
+            return name.Replace("A ", "");
+        } else if (name.StartsWith("The ")) {
+            return name.Replace("The ", "");
         }
 
-        return this.Name;
+        return name;
     }
 }

@@ -27,6 +27,8 @@ using OpenSteamworks.Utils;
 using SkiaSharp;
 using AvaloniaCommon;
 using OpenSteamClient.DI;
+using OpenSteamworks.Client.Apps.Assets;
+using OpenSteamworks.Data.KeyValue;
 
 namespace OpenSteamClient.ViewModels.Library;
 
@@ -82,7 +84,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     public double LogoContainerWidth => HeroWidth - 64;
     public bool HasLogoAsText => !string.IsNullOrEmpty(LogoAsText);
 
-    private readonly AppBase app;
+    private readonly IApp app;
     private readonly FocusedAppPane pane;
     private readonly Grid heroContainer;
 
@@ -94,16 +96,26 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
         LogoAsText = "";
         app = AvaloniaApp.Container.Get<AppsManager>().GetApp(gameid);
+
         AvaloniaApp.Container.Get<CallbackManager>().Register<AppEventStateChange_t>(OnAppEventStateChange);
         AvaloniaApp.Container.Get<CallbackManager>().Register<AppLaunchResult_t>(OnAppLaunchResult);
         this.Name = app.Name;
         this.heroContainer.GetObservable(Visual.BoundsProperty).Subscribe(new AnonymousObserver<Rect>(OnHeroBoundsChanged));
         SetLibraryAssets();
 
-        app.LibraryAssetsUpdated += OnLibraryAssetsUpdated;
+        if (app is IAppAssetsInterface assetsInterface)
+        {
+            assetsInterface.AssetUpdated += OnLibraryAssetsUpdated;
+        }
+
         PlayButtonLocalizationToken = "Initial state";
         PlayButtonAction = new RelayCommand(InvalidAction);
         UpdatePlayButton(app.State);
+    }
+
+    private void OnLibraryAssetsUpdated(object? sender, IAppAssetsInterface.AssetEventArgs e)
+    {
+        AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Send, SetLibraryAssets);
     }
 
     private void OnAppLaunchResult(ICallbackHandler handler, AppLaunchResult_t t)
@@ -117,7 +129,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
     private void OnAppEventStateChange(ICallbackHandler handler, AppEventStateChange_t change)
     {
-        UpdatePlayButton(change.m_eNewState);
+        UpdatePlayButton(change.NewState);
     }
 
 #pragma warning disable MVVMTK0034
@@ -128,6 +140,12 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 #pragma warning restore MVVMTK0034
     private void UpdatePlayButton(EAppState state)
     {
+        bool isAppPlayable = false;
+        if (app is IAppLaunchInterface launchInterface)
+        {
+            isAppPlayable = launchInterface.LaunchOptions.Any();
+        }
+
         if (state.HasFlag(EAppState.AppRunning))
         {
             PlayButtonLocalizationToken = "#App_StopApp";
@@ -148,7 +166,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
             PlayButtonLocalizationToken = "#App_UpdateApp";
             PlayButtonAction = new RelayCommand(Update);
         }
-        else if (app.LaunchOptions.Any() && state == EAppState.FullyInstalled)
+        else if (isAppPlayable && state == EAppState.FullyInstalled)
         {
             if (app.Type == EAppType.Game)
             {
@@ -163,7 +181,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
         } else if (state == EAppState.Uninstalled || state.HasFlag(EAppState.SharedOnly)) {
             PlayButtonLocalizationToken = "#App_InstallApp";
             PlayButtonAction = new RelayCommand(RequestInstall);
-        } else if ((!app.LaunchOptions.Any() || !app.IsOwnedAndPlayable) && state == EAppState.FullyInstalled) {
+        } else if ((!isAppPlayable) && state == EAppState.FullyInstalled) {
             PlayButtonLocalizationToken = "#App_UninstallApp";
             PlayButtonAction = new RelayCommand(Uninstall);
         }
@@ -180,29 +198,34 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 #pragma warning restore MVVMTK0034
     private void SetLibraryAssets()
     {
-        if (app.LocalHeroPath == null && app.LocalLogoPath == null) {
-            LogoAsText = app.Name;
+        string? localLogoPath = null;
+        string? localHeroPath = null;
+        if (app is IAppAssetsInterface assetsInterface)
+        {
+            localLogoPath = assetsInterface.Assets.FirstOrDefault(a => a.Type == ELibraryAssetType.Logo)?.LocalPath;
+            localHeroPath = assetsInterface.Assets.FirstOrDefault(a => a.Type == ELibraryAssetType.Hero)?.LocalPath;
         }
 
-        if (app.LocalHeroPath != null)
+        if (string.IsNullOrEmpty(localHeroPath) && string.IsNullOrEmpty(localLogoPath))
+            LogoAsText = app.Name;
+
+        if (!string.IsNullOrEmpty(localHeroPath))
         {
             this.Hero = new ImageBrush()
             {
-                Source = new Bitmap(app.LocalHeroPath)
+                Source = new Bitmap(localHeroPath)
             };
         } else {
             this.Hero = Brushes.Transparent;
         }
 
-        string? localLogoPath;
-        AppBase.ILibraryAssetAlignment? assetAlignment;
-        if (app.IsUsingParentLogo && app is SteamApp sapp && sapp.ParentApp != null) {
-            localLogoPath = sapp.LocalLogoPath;
-            assetAlignment = sapp.ParentApp.LibraryAssetAlignment;
-        } else {
-            localLogoPath = app.LocalLogoPath;
-            assetAlignment = app.LibraryAssetAlignment;
+        AppDataCommonSection.LibraryAssetsT? assetAlignment = null;
+        if (app is IAppInfoAccessInterface appInfoAccessInterface)
+        {
+            assetAlignment = appInfoAccessInterface.Common.LibraryAssets;
         }
+
+
 
         if (localLogoPath != null)
         {
@@ -211,7 +234,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
             if (assetAlignment != null) {
                 this.LogoHeight = (this.HeroHeight / 100) * assetAlignment.LogoHeightPercentage;
                 this.LogoWidth = (this.HeroWidth / 100) * assetAlignment.LogoWidthPercentage;
-                
+
                 if (assetAlignment.LogoPinnedPosition == "CenterCenter") {
                     LogoHorizontalAlignment = HorizontalAlignment.Center;
                     LogoVerticalAlignment = VerticalAlignment.Center;
@@ -235,11 +258,6 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
         }
     }
 
-    public void OnLibraryAssetsUpdated(object? sender, EventArgs e)
-    {
-        AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Send, () => SetLibraryAssets());
-    }
-
     public void OnHeroBoundsChanged(Rect newBounds)
     {
         SetLibraryAssets();
@@ -252,17 +270,26 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
     private void PauseUpdate()
     {
-        this.app.PauseUpdate();
+        if (app is IAppInstallInterface installInterface)
+        {
+            installInterface.PauseInstall();
+        }
     }
 
     private void Update()
     {
-        this.app.Update();
+        if (app is IAppInstallInterface installInterface)
+        {
+            installInterface.StartUpdate();
+        }
     }
 
     private void KillApp()
     {
-        this.app.Kill();
+        if (app is IAppLaunchInterface launchInterface)
+        {
+            launchInterface.Kill();
+        }
     }
 
     private void Uninstall() {
@@ -270,11 +297,15 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     }
 
     private void RequestInstall() {
-        UtilityFunctions.Assert(app is SteamApp);
-        SelectInstallDirectoryDialog dialog = new();
-        dialog.DataContext = AvaloniaApp.Container.Construct<SelectInstallDirectoryDialogViewModel>(dialog, (app as SteamApp)!);
+        if (app is IAppInstallInterface installInterface)
+        {
+            SelectInstallDirectoryDialog dialog = new();
+            dialog.DataContext = AvaloniaApp.Container.Construct<SelectInstallDirectoryDialogViewModel>(dialog, installInterface);
 
-        AvaloniaApp.Current?.TryShowDialog(dialog);
+            AvaloniaApp.Current?.TryShowDialog(dialog);
+        }
+
+
     }
 
 
@@ -282,34 +313,38 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     {
         try
         {
-            if (this.app.DefaultLaunchOptionID != null)
+            if (app is IAppLaunchInterface launchInterface)
             {
-                await this.app.Launch("", this.app.DefaultLaunchOptionID.Value);
-            } else {
-                AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Normal, () =>
+                if (launchInterface.DefaultOption != null)
                 {
-                    var dialog = new PickLaunchOptionDialog();
-                    var vm = new PickLaunchOptionDialogViewModel(dialog, app);
-                    dialog.DataContext = vm;
-                    vm.OptionSelected += (object? sender, int selectedOption) =>
+                    launchInterface.Launch(launchInterface.DefaultOption, ELaunchSource._2ftLibraryDetails);
+                } else {
+                    AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Normal, () =>
                     {
-                        this.app.Launch("", selectedOption);
-                    };
-    
-                    dialog.Show();
-                });
+                        var dialog = new PickLaunchOptionDialog();
+                        var vm = new PickLaunchOptionDialogViewModel(dialog, app);
+                        dialog.DataContext = vm;
+                        vm.OptionSelected += (_, selectedOption) =>
+                        {
+                            launchInterface.Launch(selectedOption, ELaunchSource._2ftLibraryDetails);
+                        };
+
+                        dialog.Show();
+                    });
+                }
             }
+
         }
-        catch (System.Exception e)
+        catch (Exception e)
         {
-            Console.WriteLine("Error launching app " + e.ToString());
+            Console.WriteLine("Error launching app " + e);
             try
             {
-                MessageBox.Error("Error launching app " + this.Name, "Exception message: " + e.Message, e.ToString());
+                MessageBox.Error("Error launching app " + Name, "Exception message: " + e.Message, e.ToString());
             }
-            catch (System.Exception)
+            catch (Exception)
             {
-                
+
             }
         }
     }

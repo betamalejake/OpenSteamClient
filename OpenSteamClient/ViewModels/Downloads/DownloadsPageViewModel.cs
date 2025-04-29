@@ -8,122 +8,103 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSteamworks.Client.Config;
 using OpenSteamworks.Client.Enums;
 using OpenSteamworks.Client.Utils;
-using OpenSteamworks.Downloads;
+using OpenSteamworks.Helpers;
 
 namespace OpenSteamClient.ViewModels.Downloads;
 
 public partial class DownloadsPageViewModel : AvaloniaCommon.ViewModelBase {
-    private readonly object downloadsLock = new();
     public ObservableCollection<DownloadItemViewModel> DownloadQueue { get; init; } = new();
     public ObservableCollection<DownloadItemViewModel> ScheduledDownloads { get; init; } = new();
     public ObservableCollection<DownloadItemViewModel> UnscheduledDownloads { get; init; } = new();
-    
+
 
     [ObservableProperty]
-    private DownloadItemViewModel? currentDownload;
+    private DownloadItemViewModel? _currentDownload;
 
     [ObservableProperty]
-    private ulong peakDownloadRateNum;
+    private ulong _peakDownloadRateNum;
 
     [ObservableProperty]
-    private ulong peakDiskRateNum;
+    private ulong _peakDiskRateNum;
 
     [ObservableProperty]
-    private string currentDownloadRate;
+    private string _currentDownloadRate;
 
     [ObservableProperty]
-    private string currentDiskRate;
+    private string _currentDiskRate;
 
     [ObservableProperty]
-    private string peakDownloadRate;
+    private string _peakDownloadRate;
 
     [ObservableProperty]
-    private string peakDiskRate;
+    private string _peakDiskRate;
 
-    private readonly DownloadManager downloadManager;
-    private readonly UserSettings userSettings;
-    public DownloadsPageViewModel(DownloadManager downloadManager, UserSettings userSettings) {
-        this.userSettings = userSettings;
-        this.downloadManager = downloadManager;
-        downloadManager.DownloadStatsChanged += OnDownloadStatsChanged;
-        downloadManager.DownloadsChanged += OnDownloadQueueChanged;
-        UpdateDownloadQueue();
+    private readonly DownloadsHelper _downloadManager;
+    private readonly UserSettings _userSettings;
+    public DownloadsPageViewModel(DownloadsHelper downloadManager, UserSettings userSettings) {
+        this._userSettings = userSettings;
+        this._downloadManager = downloadManager;
+        downloadManager.DownloadChanged += OnDownloadChanged;
+        downloadManager.DownloadScheduleChanged += OnDownloadQueueChanged;
         UpdateRates(new());
     }
 
-    private void OnDownloadStatsChanged(object? sender, DownloadStats e)
+    private void OnDownloadChanged(object? sender, DownloadsHelper.DownloadChangedEventArgs e)
     {
         UpdateRates(e);
     }
 
-    private void OnDownloadQueueChanged(object? sender, EventArgs e)
+    private void OnDownloadQueueChanged(object? sender, DownloadsHelper.DownloadScheduleChangedEventArgs e)
     {
-        UpdateDownloadQueue();
-    }
-
-    private void UpdateDownloadQueue() {
-        AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Normal, UpdateDownloadQueueInternal);
-    }
-
-    private void UpdateDownloadQueueInternal() {
-        lock (downloadsLock)
+        // Update download queue
+        this.DownloadQueue.Clear();
+        foreach (var newitem in e.QueuedApps)
         {
-            // Update download queue
-            var queue = this.downloadManager.DownloadQueue;
-            this.DownloadQueue.Clear();
-            Console.WriteLine("Queue len " + queue.Count());
-            foreach (var newitem in queue)
-            {
-                Console.WriteLine("queue: " + newitem);
-                this.DownloadQueue.Add(new DownloadItemViewModel(downloadManager, newitem));
-            }
-    
-            // Update scheduled downloads
-            var scheduled = this.downloadManager.ScheduledDownloads;
-            this.ScheduledDownloads.Clear();
-            Console.WriteLine("scheduled len " + scheduled.Count());
-            foreach (var newitem in scheduled)
-            {
-                Console.WriteLine("scheduled: " + newitem);
-                this.ScheduledDownloads.Add(new DownloadItemViewModel(downloadManager, newitem));
-            }
-    
-            // Update unscheduled downloads
-            var unscheduled = this.downloadManager.UnscheduledDownloads;
-            this.UnscheduledDownloads.Clear();
-            Console.WriteLine("unscheduled len " + unscheduled.Count());
-            foreach (var newitem in unscheduled)
-            {
-                Console.WriteLine("unscheduled: " + newitem);
-                this.UnscheduledDownloads.Add(new DownloadItemViewModel(downloadManager, newitem));
-            }
-    
-            if (downloadManager.CurrentDownload != 0) {
-                this.CurrentDownload = new DownloadItemViewModel(downloadManager, downloadManager.CurrentDownload);
-            } else {
-                this.CurrentDownload = null;
-            } 
+            Console.WriteLine("queue: " + newitem);
+            this.DownloadQueue.Add(new DownloadItemViewModel(_downloadManager, newitem));
+        }
+
+        // Update scheduled downloads
+        this.ScheduledDownloads.Clear();
+        foreach (var newitem in e.ScheduledApps)
+        {
+            Console.WriteLine("scheduled: " + newitem);
+            this.ScheduledDownloads.Add(new DownloadItemViewModel(_downloadManager, newitem.Key));
+        }
+
+        // Update unscheduled downloads
+        this.UnscheduledDownloads.Clear();
+        foreach (var newitem in e.UnscheduledApps)
+        {
+            Console.WriteLine("unscheduled: " + newitem);
+            this.UnscheduledDownloads.Add(new DownloadItemViewModel(_downloadManager, newitem));
         }
     }
 
 #pragma warning disable MVVMTK0034
-    [MemberNotNull(nameof(currentDownloadRate))]
-    [MemberNotNull(nameof(currentDiskRate))]
-    [MemberNotNull(nameof(peakDownloadRate))]
-    [MemberNotNull(nameof(peakDiskRate))]
+    [MemberNotNull(nameof(_currentDownloadRate))]
+    [MemberNotNull(nameof(_currentDiskRate))]
+    [MemberNotNull(nameof(_peakDownloadRate))]
+    [MemberNotNull(nameof(_peakDiskRate))]
 #pragma warning restore MVVMTK0034
-    private void UpdateRates(DownloadStats downloadStats) {
-        if (downloadStats.DownloadRateBytes > PeakDownloadRateNum) {
-            PeakDownloadRateNum = downloadStats.DownloadRateBytes;
+    private void UpdateRates(DownloadsHelper.DownloadChangedEventArgs downloadStats) {
+        if (downloadStats.DownloadingAppID != 0) {
+            this.CurrentDownload = new DownloadItemViewModel(_downloadManager, downloadStats.DownloadingAppID);
+        } else {
+            this.CurrentDownload = null;
         }
 
-        if (downloadStats.DiskRateBytes > PeakDiskRateNum) {
-            PeakDiskRateNum = downloadStats.DiskRateBytes;
+        if (downloadStats.DownloadRate > PeakDownloadRateNum) {
+            PeakDownloadRateNum = downloadStats.DownloadRate;
         }
 
-        CurrentDownloadRate = DataUnitStrings.GetStringForDownloadSpeed(downloadStats.DownloadRateBytes, userSettings.DownloadDataRateUnit);
-        CurrentDiskRate = DataUnitStrings.GetStringForDownloadSpeed(downloadStats.DiskRateBytes, userSettings.DownloadDataRateUnit);
-        PeakDownloadRate = DataUnitStrings.GetStringForDownloadSpeed(PeakDownloadRateNum, userSettings.DownloadDataRateUnit);
-        PeakDiskRate = DataUnitStrings.GetStringForDownloadSpeed(PeakDiskRateNum, userSettings.DownloadDataRateUnit);
+        if (downloadStats.DiskRate > PeakDiskRateNum) {
+            PeakDiskRateNum = downloadStats.DiskRate;
+        }
+
+        CurrentDownloadRate = DataUnitStrings.GetStringForDownloadSpeed(downloadStats.DownloadRate, _userSettings.DownloadDataRateUnit);
+        CurrentDiskRate = DataUnitStrings.GetStringForDownloadSpeed(downloadStats.DiskRate, _userSettings.DownloadDataRateUnit);
+        PeakDownloadRate = DataUnitStrings.GetStringForDownloadSpeed(PeakDownloadRateNum, _userSettings.DownloadDataRateUnit);
+        PeakDiskRate = DataUnitStrings.GetStringForDownloadSpeed(PeakDiskRateNum, _userSettings.DownloadDataRateUnit);
     }
 }

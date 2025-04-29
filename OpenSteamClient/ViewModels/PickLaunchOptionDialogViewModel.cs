@@ -16,15 +16,15 @@ public partial class PickLaunchOptionDialogViewModel : AvaloniaCommon.ViewModelB
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanPressOK))]
     private LaunchOptionViewModel? selectedOption;
-    public event EventHandler<int>? OptionSelected;
+    public event EventHandler<ILaunchOption>? OptionSelected;
 
     public ObservableCollection<LaunchOptionViewModel> LaunchOptions { get; init; }
     public bool CanPressOK => SelectedOption != null;
 
     private readonly PickLaunchOptionDialog dialog;
     private readonly TranslationManager tm;
-    private readonly AppBase app;
-    public PickLaunchOptionDialogViewModel(PickLaunchOptionDialog dialog, AppBase app)
+    private readonly IApp app;
+    public PickLaunchOptionDialogViewModel(PickLaunchOptionDialog dialog, IApp app)
     {
         this.app = app;
         this.tm = AvaloniaApp.Container.Get<TranslationManager>();
@@ -32,12 +32,21 @@ public partial class PickLaunchOptionDialogViewModel : AvaloniaCommon.ViewModelB
         this.dialog.Title = string.Format(tm.GetTranslationForKey("#LaunchOptionDialog_Title"), app.Name);
         this.dialog.DescText.Text = string.Format(tm.GetTranslationForKey("#LaunchOptionDialog_ChooseHowToLaunch"), app.Name);
         this.dialog.Closed += OnClosed;
-        LaunchOptions = new(app.LaunchOptions.Select(MapOption));
+
+        if (app is IAppLaunchInterface launchInterface)
+        {
+	        LaunchOptions = new(launchInterface.LaunchOptions.Select(MapOption));
+        }
+        else
+        {
+	        LaunchOptions = [];
+        }
     }
 
-    private LaunchOptionViewModel MapOption(AppBase.ILaunchOption opt) {
-        string name = opt.Name;
-        if (string.IsNullOrEmpty(opt.Name)) {
+    private LaunchOptionViewModel MapOption(ILaunchOption opt)
+    {
+	    string name = opt.Title;
+        if (string.IsNullOrEmpty(name)) {
             string translationKey = "#LaunchOptionDialog_GenericOption";
             if (app.Type == EAppType.Game) {
                 translationKey += "Game";
@@ -48,7 +57,7 @@ public partial class PickLaunchOptionDialogViewModel : AvaloniaCommon.ViewModelB
             name = string.Format(tm.GetTranslationForKey(translationKey), app.Name);
         }
     
-        return new(opt.ID, name, opt.Description);
+        return new(opt, name, null);
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -61,7 +70,7 @@ public partial class PickLaunchOptionDialogViewModel : AvaloniaCommon.ViewModelB
         Close();
         
         if (this.SelectedOption != null) {
-            OptionSelected?.Invoke(this, this.SelectedOption.ID);
+            OptionSelected?.Invoke(this, this.SelectedOption.Option);
         }
     }
 }

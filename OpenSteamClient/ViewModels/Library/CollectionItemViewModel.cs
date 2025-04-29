@@ -12,7 +12,6 @@ namespace OpenSteamClient.ViewModels.Library;
 
 public partial class CollectionItemViewModel : Node
 {
-    protected override string ActualName => $"{collection.Name} ({Children.Count})";
     public string ID => collection.ID;
 
     private readonly Collection collection;
@@ -23,5 +22,16 @@ public partial class CollectionItemViewModel : Node
         this.StatusIcon = Brushes.Transparent;
         this.HasIcon = false;
         this.IsApp = false;
+        UpdateName();
+        Children.CollectionChanged += (sender, args) =>
+        {
+            UpdateName();
+        };
     }
+
+    private void UpdateName()
+    {
+        this.Name = $"{collection.Name} ({Children.Count})";
+    }
+
 }

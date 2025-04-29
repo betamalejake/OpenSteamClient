@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
-using OpenSteamworks.ClientInterfaces;
+using OpenSteamworks.Helpers;
 using OpenSteamworks.Generated;
 using OpenSteamworks.Data;
 
@@ -14,18 +14,18 @@ public partial class LibraryFolderViewModel : AvaloniaCommon.ViewModelBase {
     [ObservableProperty]
     private int installedApps;
 
-    public LibraryFolderViewModel(ClientApps clientApps, LibraryFolder_t folderID) {
+    public LibraryFolderViewModel(AppManagerHelper appManagerHelper, LibraryFolder_t folderID) {
         ID = folderID;
-        Name = clientApps.GetLibraryFolderLabel(folderID);
-        Path = clientApps.GetLibraryFolderPath(folderID);
-        InstalledApps = clientApps.GetNumAppsInFolder(folderID);
+        Name = appManagerHelper.GetLibraryFolderLabel(folderID);
+        Path = appManagerHelper.GetLibraryFolderPath(folderID);
+        InstalledApps = appManagerHelper.GetNumAppsInFolder(folderID);
     }
 
-    public static List<LibraryFolderViewModel> GetLibraryFolders(ClientApps clientApps) {
+    public static List<LibraryFolderViewModel> GetLibraryFolders(AppManagerHelper appManagerHelper) {
         var list = new List<LibraryFolderViewModel>();
-        for (int i = 0; i < clientApps.GetNumLibraryFolders(); i++)
+        for (int i = 0; i < appManagerHelper.NumLibraryFolders; i++)
         {
-            if (!clientApps.NativeClientAppManager.BGetLibraryFolderInfo(i, out bool mounted, out _, out _)) {
+            if (!appManagerHelper.BGetLibraryFolderInfo(i, out bool mounted, out _, out _)) {
                 continue;
             }
 
@@ -33,7 +33,7 @@ public partial class LibraryFolderViewModel : AvaloniaCommon.ViewModelBase {
                 continue;
             }
 
-            list.Add(new LibraryFolderViewModel(clientApps, i));
+            list.Add(new LibraryFolderViewModel(appManagerHelper, i));
         }
 
         return list;
