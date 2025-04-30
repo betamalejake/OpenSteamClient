@@ -2,6 +2,7 @@ using OpenSteamworks.Client.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.Generic;
 using System;
+using Avalonia.Controls;
 using OpenSteamClient.DI.Lifetime;
 
 namespace OpenSteamClient.ViewModels;
@@ -22,6 +23,9 @@ public partial class ProgressWindowViewModel : AvaloniaCommon.ViewModelBase
 
 	[ObservableProperty]
     private string subOperation = "";
+
+    [ObservableProperty]
+    private Action<WindowClosingEventArgs>? onClosed;
 
     public ProgressWindowViewModel(Progress<OperationProgress> prog, string title = "")
     {

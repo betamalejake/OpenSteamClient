@@ -30,11 +30,13 @@ public class Library
     private readonly LibraryManager libraryManager;
     private readonly UserHelper userHelper;
     private readonly AppManagerHelper appManagerHelper;
+    private readonly AppsManager appsManager;
     private readonly ILoggerFactory loggerFactory;
 
     public event EventHandler? LibraryUpdated;
-    internal Library(LibraryManager libraryManager, ISteamClient steamClient, ILoggerFactory loggerFactory, CloudConfigStore cloudConfigStore, LoginManager loginManager, AppsHelper appsHelper, InstallManager installManager)
+    internal Library(AppsManager appsManager, LibraryManager libraryManager, ISteamClient steamClient, ILoggerFactory loggerFactory, CloudConfigStore cloudConfigStore, LoginManager loginManager, AppsHelper appsHelper, InstallManager installManager)
     {
+        this.appsManager = appsManager;
 	    this.loggerFactory = loggerFactory;
 	    this.appManagerHelper = steamClient.AppManagerHelper;
 	    this.userHelper = steamClient.UserHelper;
@@ -104,7 +106,7 @@ public class Library
 
         // Add all apps not in any categories to Uncategorized
         var uncategorized = GetCollectionByID("uncategorized");
-        var ownedAppsAsGameIDs = userHelper.GetSubscribedApps().Select(a => new CGameID(a)).ToHashSet();
+        var ownedAppsAsGameIDs = appsManager.GetLibraryApps().Select(a => a.ID).ToHashSet();
         HashSet<CGameID> uncategorizedAppIDs = new(ownedAppsAsGameIDs);
         uncategorizedAppIDs.SymmetricExceptWith(AppIDsInCollections);
         foreach (var item in uncategorizedAppIDs)

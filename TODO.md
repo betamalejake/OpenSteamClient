@@ -18,6 +18,10 @@
     - Stuck appinfo loading
     - "Update Required" on launch
   - Use MVVM everywhere and delete OSW.Client
+  - Library rewrite
+    - Load all apps synchronously beforehand
+    - Load all library appids and init those apps
+    - Parse library and show only apps which are the correct type and have appinfo
 ## Reasonably scoped / low-hanging fruit
 - Update code style:
   - Decide on cosmetic style

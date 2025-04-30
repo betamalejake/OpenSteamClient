@@ -29,7 +29,32 @@ public interface IAppConfigInterface : IApp
 		Enabled = 2
 	}
 
+    /// <summary>
+    /// The keys this app supports.
+    /// </summary>
     public IEnumerable<ConfigKey> SupportedKeys { get; }
-	public bool SetConfigValue(ConfigKey key, object value);
+
+    /// <summary>
+    /// Set the config key to the specified value.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <returns>True if the change was successful, false if not.</returns>
+	public bool SetConfigValue(ConfigKey key, object? value);
+
+    /// <summary>
+    /// Gets the value of the specified key.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <returns>True if retrieving the value succeeded, false if it failed.</returns>
 	public bool TryGetConfigValue(ConfigKey key, [NotNullWhen(true)] out object? value);
+
+    /// <summary>
+    /// Get the allowed values for this key.
+    /// If the returned list is empty, any values are allowed.
+    /// </summary>
+    /// <param name="key"></param>
+    /// <returns></returns>
+    public IEnumerable<object?> GetAllowedValues(ConfigKey key);
 }

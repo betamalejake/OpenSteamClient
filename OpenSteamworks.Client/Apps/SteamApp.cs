@@ -87,6 +87,8 @@ internal sealed class SteamApp : ObservableObject, IApp, IAppInfoAccessInterface
 
     public static IApp Create(ISteamClient steamClient, AppsManager appsManager, CGameID gameid)
     {
+        Trace.Assert(gameid.IsValid());
+
         var appInfo = steamClient.AppsHelper.GetAppInfo(gameid.AppID, IAppInfoAccessInterface.Sections);
         return new SteamApp(steamClient, appsManager, gameid, appInfo);
     }
@@ -105,7 +107,7 @@ internal sealed class SteamApp : ObservableObject, IApp, IAppInfoAccessInterface
         IAppConfigInterface.ConfigKey.DEFAULT_LAUNCH_OPTION
     ];
 
-    public bool SetConfigValue(IAppConfigInterface.ConfigKey key, object value)
+    public bool SetConfigValue(IAppConfigInterface.ConfigKey key, object? value)
 	{
 		switch (key)
 		{
@@ -197,7 +199,15 @@ internal sealed class SteamApp : ObservableObject, IApp, IAppInfoAccessInterface
 		return false;
 	}
 
-	private sealed class LaunchOption : ILaunchOption
+    public IEnumerable<object?> GetAllowedValues(IAppConfigInterface.ConfigKey key)
+    {
+        if (key != IAppConfigInterface.ConfigKey.COMPAT_TOOL_NAME)
+            return [];
+
+        return _steamClient.CompatHelper.GetCompatToolsForApp(AppID);
+    }
+
+    private sealed class LaunchOption : ILaunchOption
 	{
 		public required uint ID { get; init; }
 		public required string Title { get; init; }

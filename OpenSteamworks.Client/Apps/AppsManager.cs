@@ -5,6 +5,7 @@ using OpenSteamClient.Logging;
 using OpenSteamworks.Callbacks;
 using OpenSteamworks.Callbacks.Structs;
 using OpenSteamworks.Data;
+using OpenSteamworks.Data.Enums;
 using OpenSteamworks.Data.Structs;
 
 namespace OpenSteamworks.Client.Apps;
@@ -67,8 +68,6 @@ public sealed class AppsManager
 
     public IApp GetApp(CGameID gameId)
 	{
-		Trace.Assert(gameId.IsValid());
-
         if (_appCache.TryGetValue(gameId, out IApp? app))
             return app;
 
@@ -108,7 +107,7 @@ public sealed class AppsManager
         return apps;
     }
 
-    private readonly ConcurrentBag<CGameID> _bannedApps = new();
+    private readonly ConcurrentBag<CGameID> _bannedApps = new() { CGameID.Zero };
     public async Task InitApps(IEnumerable<AppId_t> appIDs)
     {
         appIDs = appIDs.ToList();
@@ -128,4 +127,8 @@ public sealed class AppsManager
             }
         }
     }
+
+    public IEnumerable<IApp> GetLibraryApps()
+        => GetApps(_steamClient.UserHelper.GetSubscribedApps().Select(a => new CGameID(a))).Where(a => a.Type is EAppType.Application or EAppType.Beta or EAppType.Game or EAppType.Shortcut
+            or EAppType.Tool);
 }

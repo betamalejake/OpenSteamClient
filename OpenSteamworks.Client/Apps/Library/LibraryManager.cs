@@ -57,7 +57,7 @@ public class LibraryManager : ILogonLifetime
     }
 
     public async Task RunLogon(IProgress<OperationProgress> progress) {
-        Library library = new(this, _steamClient, _loggerFactory, _cloudConfigStore, _loginManager, _appsHelper, _installManager);
+        Library library = new(_appsManager, this, _steamClient, _loggerFactory, _cloudConfigStore, _loginManager, _appsHelper, _installManager);
         HashSet<CGameID> allUserAppIDs = await library.InitializeLibrary();
         await _appsManager.InitApps(allUserAppIDs.Where(a => a.IsSteamApp()).Select(a => a.AppID).ToArray());
 

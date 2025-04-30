@@ -25,6 +25,7 @@
         <StackPanel>
             <TextBlock Text="{Binding Name}"/>
             <Button c:Translatable.TranslationKey="{Binding PlayButtonLocalizationToken}" Command="{Binding PlayButtonAction}"/>
+            <Button Content="Settings" Click="OpenSettingsForApp"></Button>
         </StackPanel>
     </DockPanel>
 </UserControl>

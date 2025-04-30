@@ -23,7 +23,12 @@ public partial class LibraryPageViewModel : AvaloniaCommon.ViewModelBase
 
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSideContent))]
+    [NotifyPropertyChangedFor(nameof(ListColumnSpan))]
     private Control? sideContent;
+
+    public bool HasSideContent => sideContent != null;
+    public int ListColumnSpan => HasSideContent ? 1 : 3;
 
     private string searchText = string.Empty;
     public string SearchText {
@@ -56,6 +61,11 @@ public partial class LibraryPageViewModel : AvaloniaCommon.ViewModelBase
         OnLibraryUpdated(this, EventArgs.Empty);
 
         this.SelectedNodes.CollectionChanged += SelectionChanged;
+    }
+
+    public void HideSidePane()
+    {
+        SideContent = null;
     }
 
     private void OnLibraryUpdated(object? sender, EventArgs e)
@@ -136,7 +146,7 @@ public partial class LibraryPageViewModel : AvaloniaCommon.ViewModelBase
         CollectionItemViewModel vm = new(collection);
         Nodes.Add(vm);
         Nodes.Sort();
-        
+
         return vm;
     }
 }

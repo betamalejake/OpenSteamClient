@@ -29,22 +29,21 @@ public class Bootstrapper {
             }
 
             //TODO: We shouldn't hardcode this but it will do...
+            // Other URLs https://media.steampowered.com/client/
             return "https://client-update.akamai.steamstatic.com/";
         }
     }
 
     private InstallManager installManager;
-    public string SteamclientLibPath {
-        get {
-            return Path.Combine(MainBinaryDir, OSSpecifics.Instance.SteamClientBinaryName);
-        }
-    }
-    public string PlatformClientManifest {
-        get {
-            return OSSpecifics.Instance.SteamClientManifestName;
-        }
-    }
-    public string PackageDir => Path.Combine(installManager.InstallDir, "package");
+    public string SteamclientLibPath
+        => Path.Combine(MainBinaryDir, OSSpecifics.Instance.SteamClientBinaryName);
+
+    public string PlatformClientManifest
+        => OSSpecifics.Instance.SteamClientManifestName;
+
+    public string PackageDir
+        => Path.Combine(installManager.InstallDir, "package");
+
     public string MainBinaryDir {
         get {
             if (OperatingSystem.IsLinux()) {
@@ -56,10 +55,12 @@ public class Bootstrapper {
     }
 
     [SupportedOSPlatform("linux")]
-    public string Ubuntu12_32Dir => Path.Combine(installManager.InstallDir, "ubuntu12_32");
+    public string Ubuntu12_32Dir
+        => Path.Combine(installManager.InstallDir, "ubuntu12_32");
 
     [SupportedOSPlatform("linux")]
-    public string Ubuntu12_64Dir => Path.Combine(installManager.InstallDir, "ubuntu12_64");
+    public string Ubuntu12_64Dir
+        => Path.Combine(installManager.InstallDir, "ubuntu12_64");
 
     //TODO: make this into an interface so clients can decide what packages they want
     private bool IsPackageBlacklisted(string packageName) {
@@ -92,9 +93,7 @@ public class Bootstrapper {
 
     private IProgress<OperationProgress>? progressHandler;
 
-    public void SetProgressObject(IProgress<OperationProgress>? progressHandler) {
-        this.progressHandler = progressHandler;
-    }
+    public void SetProgressObject(IProgress<OperationProgress>? progressHandler) => this.progressHandler = progressHandler;
 
     private readonly BootstrapperState bootstrapperState;
     private readonly ILogger logger;

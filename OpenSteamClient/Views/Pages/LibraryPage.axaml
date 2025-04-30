@@ -16,62 +16,68 @@
         <vm:LibraryPageViewModel/>
     </Design.DataContext>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="1*" MinWidth="64" />
-            <ColumnDefinition Width="2"/>
-            <ColumnDefinition Width="4*" MinWidth="64" />
-        </Grid.ColumnDefinitions>
+    <DockPanel LastChildFill="True">
+        <DockPanel DockPanel.Dock="Top" LastChildFill="False">
+            <Button Content="Hide pane" IsVisible="{Binding HasSideContent}" Command="{Binding HideSidePane}"></Button>
+        </DockPanel>
 
-        <Grid x:Name="GameListAndFilters">
+        <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1*" MinWidth="64" />
+                <ColumnDefinition Width="2"/>
+                <ColumnDefinition Width="4*" MinWidth="64" />
             </Grid.ColumnDefinitions>
 
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="4*" />
-            </Grid.RowDefinitions>
+            <Grid x:Name="GameListAndFilters" Grid.ColumnSpan="{Binding ListColumnSpan}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <!-- Game list and filters -->
-            <StackPanel Grid.Row="0" x:Name="GameFilters">
-                <!-- Filters area -->
-                <TextBox x:Name="SearchBar" c:Translatable.TranslationKey="#Library_SearchBarWatermark" Text="{Binding SearchText}"/>
-            </StackPanel>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="4*" />
+                </Grid.RowDefinitions>
 
-            <TreeView Grid.Row="1" SelectedItems="{Binding SelectedNodes}" ItemsSource="{Binding Nodes}">
-                <!-- Game list -->
+                <!-- Game list and filters -->
+                <StackPanel Grid.Row="0" x:Name="GameFilters">
+                    <!-- Filters area -->
+                    <TextBox x:Name="SearchBar" c:Translatable.TranslationKey="#Library_SearchBarWatermark" Text="{Binding SearchText}"/>
+                </StackPanel>
 
-                <!-- To set properties in the constructed TreeItem, do this -->
-                <TreeView.Styles>
-                    <Style Selector="TreeViewItem" x:DataType="vml:Node">
-                        <!-- <Setter Property="ShowExpandCollapseChevron" Value="{Binding !IsApp}"/> -->
-                    </Style>
+                <TreeView Grid.Row="1" SelectedItems="{Binding SelectedNodes}" ItemsSource="{Binding Nodes}">
+                    <!-- Game list -->
 
-                    <Style Selector="Panel#PART_ExpandCollapseChevronContainer" x:DataType="vml:Node">
-                        <Setter Property="IsEnabled" Value="{Binding !IsApp}" />
-                        <Setter Property="IsVisible" Value="{Binding !IsApp}" />
-                    </Style>
+                    <!-- To set properties in the constructed TreeItem, do this -->
+                    <TreeView.Styles>
+                        <Style Selector="TreeViewItem" x:DataType="vml:Node">
+                            <!-- <Setter Property="ShowExpandCollapseChevron" Value="{Binding !IsApp}"/> -->
+                        </Style>
 
-                    <!-- TODO: Find a way to remove the extra margin at the start of the element, but only for apps and not collections -->
-                    <!-- <Style Selector="Grid#PART_Header" x:DataType="vml:Node">
-                        <Setter Property="Margin" Value="0" />
-                    </Style> -->
-                </TreeView.Styles>
+                        <Style Selector="Panel#PART_ExpandCollapseChevronContainer" x:DataType="vml:Node">
+                            <Setter Property="IsEnabled" Value="{Binding !IsApp}" />
+                            <Setter Property="IsVisible" Value="{Binding !IsApp}" />
+                        </Style>
 
-                <TreeView.ItemTemplate>
-                    <TreeDataTemplate ItemsSource="{Binding Children}">
-                        <StackPanel Orientation="Horizontal">
-                            <Canvas Height="20" Width="20" Top="0" Left="0" Margin="0,0,4,0" IsVisible="{Binding HasIcon}" Background="{Binding Icon}"/>
-                            <TextBlock Foreground="{Binding Foreground, Mode=OneWay}" Text="{Binding Name, Mode=OneWay}"/>
-                        </StackPanel>
-                    </TreeDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
+                        <!-- TODO: Find a way to remove the extra margin at the start of the element, but only for apps and not collections -->
+                        <!-- <Style Selector="Grid#PART_Header" x:DataType="vml:Node">
+                            <Setter Property="Margin" Value="0" />
+                        </Style> -->
+                    </TreeView.Styles>
+
+                    <TreeView.ItemTemplate>
+                        <TreeDataTemplate ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal">
+                                <Canvas Height="20" Width="20" Top="0" Left="0" Margin="0,0,4,0" IsVisible="{Binding HasIcon}" Background="{Binding Icon}"/>
+                                <TextBlock Foreground="{Binding Foreground, Mode=OneWay}" Text="{Binding Name, Mode=OneWay}"/>
+                            </StackPanel>
+                        </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Grid>
+            <GridSplitter Grid.Column="1" IsVisible="{Binding HasSideContent}" ResizeDirection="Columns" Background="Black"/>
+
+            <!-- Side content (game detail view, "big coverart" view) -->
+            <ContentControl Grid.Column="2" IsVisible="{Binding HasSideContent}" Content="{Binding SideContent}" />
         </Grid>
-        <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Black"/>
-
-        <!-- Side content (game detail view, "big coverart" view) -->
-        <ContentControl Grid.Column="2" Content="{Binding SideContent}" />
-    </Grid>
+    </DockPanel>
 </c:BasePage>

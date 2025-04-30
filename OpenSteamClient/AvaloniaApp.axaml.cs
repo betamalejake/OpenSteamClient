@@ -32,7 +32,9 @@ using OpenSteamworks.Client.Startup;
 using AvaloniaCommon;
 using System.Diagnostics;
 using OpenSteamClient.DI.Lifetime;
+using OpenSteamworks.Client.Apps;
 using OpenSteamworks.Client.DI;
+using OpenSteamworks.Helpers;
 
 namespace OpenSteamClient;
 
@@ -73,6 +75,15 @@ public class AvaloniaApp : Application
 
 		Progress<OperationProgress> progress = new();
 		var progVm = new ProgressWindowViewModel(progress, "Bootstrapper progress");
+        progVm.OnClosed = (WindowClosingEventArgs e) =>
+        {
+            if (e.IsProgrammatic)
+                return;
+
+            //TODO: OSC really does not support graceful shutdown, so do this (evil!) instead
+            Environment.Exit(0);
+        };
+
         ForceProgressWindow(progVm);
 
         Container.ConstructAndRegister<ConfigManager>();
@@ -160,6 +171,7 @@ public class AvaloniaApp : Application
             StringBuilder username = new StringBuilder(256);
             clientUser.GetAccountName(username, username.Capacity);
 
+            await Container.Get<AppsManager>().InitApps(Container.Get<UserHelper>().GetSubscribedApps());
             await Container.Get<LoginManager>().OnLoggedOn(new LoggedOnEventArgs(new LoginUser() { AccountName = username.ToString(), SteamID = clientUser.GetSteamID() }));
             ForceMainWindow();
         }

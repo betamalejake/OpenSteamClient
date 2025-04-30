@@ -84,7 +84,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     public double LogoContainerWidth => HeroWidth - 64;
     public bool HasLogoAsText => !string.IsNullOrEmpty(LogoAsText);
 
-    private readonly IApp app;
+    public IApp App { get; }
     private readonly FocusedAppPane pane;
     private readonly Grid heroContainer;
 
@@ -95,22 +95,22 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
         this.heroContainer = pane.Hero;
 
         LogoAsText = "";
-        app = AvaloniaApp.Container.Get<AppsManager>().GetApp(gameid);
+        App = AvaloniaApp.Container.Get<AppsManager>().GetApp(gameid);
 
         AvaloniaApp.Container.Get<CallbackManager>().Register<AppEventStateChange_t>(OnAppEventStateChange);
         AvaloniaApp.Container.Get<CallbackManager>().Register<AppLaunchResult_t>(OnAppLaunchResult);
-        this.Name = app.Name;
+        this.Name = App.Name;
         this.heroContainer.GetObservable(Visual.BoundsProperty).Subscribe(new AnonymousObserver<Rect>(OnHeroBoundsChanged));
         SetLibraryAssets();
 
-        if (app is IAppAssetsInterface assetsInterface)
+        if (App is IAppAssetsInterface assetsInterface)
         {
             assetsInterface.AssetUpdated += OnLibraryAssetsUpdated;
         }
 
         PlayButtonLocalizationToken = "Initial state";
         PlayButtonAction = new RelayCommand(InvalidAction);
-        UpdatePlayButton(app.State);
+        UpdatePlayButton(App.State);
     }
 
     private void OnLibraryAssetsUpdated(object? sender, IAppAssetsInterface.AssetEventArgs e)
@@ -141,7 +141,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     private void UpdatePlayButton(EAppState state)
     {
         bool isAppPlayable = false;
-        if (app is IAppLaunchInterface launchInterface)
+        if (App is IAppLaunchInterface launchInterface)
         {
             isAppPlayable = launchInterface.LaunchOptions.Any();
         }
@@ -168,7 +168,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
         }
         else if (isAppPlayable && state == EAppState.FullyInstalled)
         {
-            if (app.Type == EAppType.Game)
+            if (App.Type == EAppType.Game)
             {
                 PlayButtonLocalizationToken = "#App_PlayApp";
                 PlayButtonAction = new RelayCommand(Launch);
@@ -200,14 +200,14 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     {
         string? localLogoPath = null;
         string? localHeroPath = null;
-        if (app is IAppAssetsInterface assetsInterface)
+        if (App is IAppAssetsInterface assetsInterface)
         {
             localLogoPath = assetsInterface.Assets.FirstOrDefault(a => a.Type == ELibraryAssetType.Logo)?.LocalPath;
             localHeroPath = assetsInterface.Assets.FirstOrDefault(a => a.Type == ELibraryAssetType.Hero)?.LocalPath;
         }
 
         if (string.IsNullOrEmpty(localHeroPath) && string.IsNullOrEmpty(localLogoPath))
-            LogoAsText = app.Name;
+            LogoAsText = App.Name;
 
         if (!string.IsNullOrEmpty(localHeroPath))
         {
@@ -220,7 +220,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
         }
 
         AppDataCommonSection.LibraryAssetsT? assetAlignment = null;
-        if (app is IAppInfoAccessInterface appInfoAccessInterface)
+        if (App is IAppInfoAccessInterface appInfoAccessInterface)
         {
             assetAlignment = appInfoAccessInterface.Common.LibraryAssets;
         }
@@ -270,7 +270,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
     private void PauseUpdate()
     {
-        if (app is IAppInstallInterface installInterface)
+        if (App is IAppInstallInterface installInterface)
         {
             installInterface.PauseInstall();
         }
@@ -278,7 +278,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
     private void Update()
     {
-        if (app is IAppInstallInterface installInterface)
+        if (App is IAppInstallInterface installInterface)
         {
             installInterface.StartUpdate();
         }
@@ -286,7 +286,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
 
     private void KillApp()
     {
-        if (app is IAppLaunchInterface launchInterface)
+        if (App is IAppLaunchInterface launchInterface)
         {
             launchInterface.Kill();
         }
@@ -297,7 +297,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     }
 
     private void RequestInstall() {
-        if (app is IAppInstallInterface installInterface)
+        if (App is IAppInstallInterface installInterface)
         {
             SelectInstallDirectoryDialog dialog = new();
             dialog.DataContext = AvaloniaApp.Container.Construct<SelectInstallDirectoryDialogViewModel>(dialog, installInterface);
@@ -313,7 +313,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
     {
         try
         {
-            if (app is IAppLaunchInterface launchInterface)
+            if (App is IAppLaunchInterface launchInterface)
             {
                 if (launchInterface.DefaultOption != null)
                 {
@@ -322,7 +322,7 @@ public partial class FocusedAppPaneViewModel : AvaloniaCommon.ViewModelBase
                     AvaloniaApp.Current?.RunOnUIThread(DispatcherPriority.Normal, () =>
                     {
                         var dialog = new PickLaunchOptionDialog();
-                        var vm = new PickLaunchOptionDialogViewModel(dialog, app);
+                        var vm = new PickLaunchOptionDialogViewModel(dialog, App);
                         dialog.DataContext = vm;
                         vm.OptionSelected += (_, selectedOption) =>
                         {
