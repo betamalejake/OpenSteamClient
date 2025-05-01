@@ -7,11 +7,23 @@
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="OpenSteamClient.Views.Windows.AppSettingsWindow"
         x:DataType="vm:AppSettingsWindowViewModel"
-        Title="AppSettingsWindow">
+        Title="{Binding Name, StringFormat='{}{0} - settings'}">
     <StackPanel>
-        <ComboBox ItemsSource="{Binding CompatTools}" SelectedItem="{Binding SelectedCompatTool}">
-
+        <TextBlock Text="Set the compat tool override for this app:"/>
+        <ComboBox ItemsSource="{Binding CompatTools}" SelectedItem="{Binding SelectedCompatTool}"/>
+        <TextBlock Text="{Binding EffectiveCompatTool}"/>
+        <Button Command="{Binding OnUninstall}" IsVisible="{Binding  IsInstalled}"  Content="Uninstall (NO CONFIRMATION!)"/>
+        <TextBlock Text="Set a beta for this app"></TextBlock>
+        <ComboBox ItemsSource="{Binding Betas}" SelectedItem="{Binding SelectedBeta}">
+            <ComboBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Display}"/>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
         </ComboBox>
+        <TextBlock Text="Or enter a beta password"/>
+        <TextBox Text="{Binding BetaPassword}"></TextBox>
+        <Button Content="Check password" Command="{Binding OnCheckBetaPassword}"></Button>
     </StackPanel>
 </Window>
 

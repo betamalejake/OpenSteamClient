@@ -4,14 +4,14 @@
 A partially open-source Steam frontend for Windows and Linux
 
 # Current development status
-Everything below is blockers for release. Lots of stuff that's only documented in my head is also blockers. Lots of code cleanups are due. 
+Everything below is blockers for release. Lots of stuff that's only documented in my head is also blockers. Lots of code cleanups are due.
 Stuff marked later can wait for after we fix the rest of these things.
 Stuff marked future can be done eventually or just completely ignored
-Stuff marked rebranch-blocker is required to be solved before replacing the main branch. 
+Stuff marked rebranch-blocker is required to be solved before replacing the main branch.
 - [ ] `steam://` protocol handler
 - [ ] Startup wizard
   - [ ] initial settings
-  - [ ] steamapps linking 
+  - [ ] steamapps linking
 - [ ] Backend stuff:
   - [x] (optional) JITEngine classgen with fields
   - [x] Callback system
@@ -24,7 +24,7 @@ Stuff marked rebranch-blocker is required to be solved before replacing the main
 - [x] Account system:
   - [ ] Profile pictures
   - [ ] QR code in the loginwindow doesn't have bottom margin
-  - [x] 2FA 
+  - [x] 2FA
     - [ ] 2FA window improvements (the layout is VERY crude)
 - [x] Client settings UI
   - [x] Library folder management (rebranch-blocker)
@@ -74,8 +74,8 @@ Stuff marked rebranch-blocker is required to be solved before replacing the main
         - [ ] Visualize the full launch option in the command line box (later)
       - [ ] Add custom launch options (later)
     - [ ] Lang settings
-    - [ ] Beta branch selection (rebranch-blocker)
-    - [ ] Compat settings (rebranch-blocker)
+    - [x] Beta branch selection (rebranch-blocker)
+    - [x] Compat settings (rebranch-blocker)
       - The API seemingly has a way to set compat strings like forcelgadd, explore adding this functionality (later)
     - [ ] Workshop/Mod settings
       - [ ] See installed workshop size
@@ -103,136 +103,66 @@ Stuff marked rebranch-blocker is required to be solved before replacing the main
 - [ ] Close OpenSteamClient when pressing X on the progress dialog
 - [x] Split project into multi-repo OpenSteamworks, OpenSteamClient
 
-## TODO: Future/Never
-- [ ] Employ observability at the OSW.Client layer
-- [ ] Make managed versions of all interfaces
-- In the future, this would allow pure C# instead of needing a dependency on the native client and JITEngine
-  - IClientEngine and some bits of init would still be unavoidable
-- This requires us to know 100% of the interfaces (and would be a pretty big rewrite)
-- [x] Remove JITEngine in favour of code generation
-- [ ] Rewrite InterfaceDebugger to follow MVVM
-- [ ] Plugin system
-  - This'd be useful for making sure our code is high quality and not a mess
-  - Could also add support for extra game stores and whatnot
-  - Possible plugin types:
-    - [ ] Library art provider
-    - [ ] App provider
-    - [ ] Social provider
-    - [ ] Auth provider
-    - [ ] Misc UI data provider (protondb, widescreen, etc patches)
-    - [ ] Overlay provider
-    - [ ] ConCommand provider
-    - [ ] Store/Community provider
-    - [ ] Mod provider
-- [ ] Disabling updates for certain apps
-- [ ] Custom SDL lib
-  - [ ] Some valve specific code for handling steering wheels etc
-- [ ] Download additional depots (example: CS2 workshop tools with proton needs Windows CS2 binaries)
-  - Should be doable, just need to improve our hooking systems
-- [ ] UI Animations
-  - Does avalonia support this?
-- [ ] VAC support
-  - Basically impossible unless we get a .valvesig from Valve, which is unlikely since valve would have to acknowledge this project existance, which may be a bad thing
-- [ ] ProtonDB integration
-- [ ] Automatic game tweaking
-- [ ] External modding sources (like Nexus for Fallout games, r2modman for Lethal Company, etc)
-- [ ] Cloud file manager GUI
-- [ ] UI sounds
-- [ ] Shut off PC when game finishes installing
-- [ ] Big picture mode
-- [ ] Small mode
-- Alternative GUIs
-  - [ ] Terminal UI
-  - [ ] IMGui reimplementation?
-    - Leaving here for community interest.
-    - It'd be a lot snappier
-    - Not as styleable
-    - Apparently doesn't have good accessibility features
-    - Does have premade C# bindings though
-  - [ ] Rust rewrite
-    - "egui" seems pretty cool
-      - Can also build for the web
-  - [ ] VGUI reimplementation?
-    - Could probably very simply just load the OG ui from the cached/ folder, but VGUI_s is 32-bit and we're 64-bit
-    - Would need to reimplement the entire UI framework from scratch though
-- [ ] Reimplement steamclient.dll/so
-  - [ ] Investigate rewriting SteamService as 64-bit, and using box86 for loading 32-bit modules
-- [ ] MacOS
-- [ ] Reverse ZipVZ (ValveZip?) format
-
-# Support
-We support:
-- Arch Linux
-- Windows 10
-Anything else is not officially supported, and your issue may get closed.
-
 # Features
-NOTE: The features mentioned here are the criteria for full release. These may not be implemented yet! And these also aren't final ATM.
+NOTE: The features mentioned here are the criteria for full release. Currently we're in alpha phase. Most of these are not done, and this is not a final list.
 - The basics you'd expect:
-  - Achievements
-  - Steam Cloud
-  - Invites and friends network
+  - Achievements (NOT DONE)
+  - Steam Cloud (No UI, will try to sync though but file conflicts won't be solvable)
+  - Invites and friends network (you can send invites, but there's no UI to receive messages)
     - There's no overlay yet though, so you'll need to ALT+TAB
-  - Workshop
+  - Workshop (should work, but no UI)
     - Load order, enable/disable
-  - New family sharing
-  - Old family sharing
-- No steamservice requirement (still recommended however, requires 32-bit binaries)
-  - Required on Linux for compat tools proper functionality.
-  - Required on Windows for desktop shortcut creation, game registry entries
+  - Family sharing
 - No web technology (also known as CEF, SteamWebHelper)
-- Most games supported
+  - It's still not particularly lightweight due to it being in heavy development
+- Most games should work
   - Steam2 games untested
   - Some multiplayer games might not work
   - VAC games unsupported (nothing we can do about this, sorry!)
-- Depot browser
+  - Games that use ISteamHTMLSurface will not work (source engine MOTDs)
+- Depot browser (not done)
   - Download extra depots
   - Download individual files
-- Build history browser
+- Build history browser (not done)
   - Lock specific build
-- Steam cloud filebrowser
+- Steam cloud filebrowser (not done)
 - Misc QOL features, such as:
-  - Download all updates button
+  - Download all updates button (not done)
 - Linux users will also enjoy:
-  - 64-bit main executable  
+  - 64-bit executable
     - One app less that requires multilib/32-bit libraries
-  - ProtonDB Integration
+  - ProtonDB Integration (not done)
   - Compat tool improvements:
-    - Run .exe in prefix
-    - Run winecfg/winetricks/protontricks for game
-    - Adjust compat preferences like forcelgaddr easily
-    - Compat tool downloader
-  
+    - Run .exe in prefix (not done)
+    - Run winecfg/winetricks/protontricks for game (not done)
+    - Adjust compat preferences like forcelgaddr easily (not done)
+    - Compat tool downloader (not done)
+
 
 # Contributing
 See [CONTRIBUTING.md](https://github.com/OpenSteamClient/OpenSteamClient/blob/c%23-remake/CONTRIBUTING.md) for guidelines.
-Clone by running `git clone -b c#-remake --single-branch https://github.com/OpenSteamClient/OpenSteamClient.git --recursive`
+Clone by running `git clone https://github.com/OpenSteamClient/OpenSteamClient.git --recursive`
 Compile and run by going into OpenSteamClient and running `dotnet run`.
-Occasionally updates break existing downloaded repos, just delete the whole repo and reclone if that happens.
+Occasionally updates may break existing downloaded repos, just delete the whole repo and reclone if that happens.
 
 ## Testing
 If you decide to test OSC, you should report issues in GitHub issues.
-There's also a [Discord server](https://discord.gg/Vrk6sZfh9u), where you can discuss OpenSteamClient and related projects. 
+There's also a [Discord server](https://discord.gg/Vrk6sZfh9u), where you can discuss OpenSteamClient and related projects.
 
 # Screenshots
 Nothing for now.
 
 # Usage
-This is only meant for developers. 
+This is only meant for developers.
 Once this is in a good enough state I will write new install instructions.
 
 # System requirements
-## Windows
-- Windows 10
-### For development
-- Dotnet 8
-## Linux
-- Arch Linux
-### For development
-- Dotnet 8
+- 64-bit x86_64 PC
+- Arch Linux or Windows 10
+- Dotnet 9 (for development only)
 
 ## Credits
-Research resources we've used: 
+Research resources we've used:
 - [open-steamworks](https://github.com/SteamRE/open-steamworks)
 - [open-steamworks fork by m4dEngi](https://github.com/m4dEngi/open-steamworks)
 - [SteamTracking](https://github.com/SteamDatabase/SteamTracking)
@@ -242,21 +172,24 @@ Other credits:
 
 # Q&A
 
-## Gah! Why is making this taking such a long time???
-There's a single developer (Rosentti) working on every aspect of the rewrite. This alone makes things slow, but also the tremendous workload can cause burnout very easily. 
-To combat burnout related to OSC, I sometimes work on other projects and different parts of OSC. 
-
 ## Partially open source?
-This is a GUI for Valve's own Steam Client binaries like `steamclient.so`, `steamservice.so` and `chromehtml.so`. 
-Those binaries are not open source and Valve doesn't officially support 3rd-party usage of these. 
+This is a GUI for Valve's own Steam Client binary, the `clientdll`
+These binaries are not open source and Valve doesn't support 3rd-party usage of these.
 This also means we inherit design choices and potential bugs from these files.
 Due to this, we cannot fix everything, such as the client not conforming to the XDG paths specification (although we've limited the pollution to a .steam symlink in your home folder only).
 
 Also, thank you Valve for improving Linux gaming, and making a native Steam Client in the first place.
+
+## Is a fully open-source version planned?
+Maybe eventually. See [TODO](TODO.md)
+
+## Any non-Discord support channel?
+Sure, just file an issue report. Feature requests, issues and suggestions all go into Github Issues.
+The Discord channel is really only meant for people who don't have a Github account, and are not too well versed in programming (so, regular folk)
 
 ## What version of Steam's binaries do you use?
 The same as OpenSteamworks, available [here](https://github.com/OpenSteamClient/OpenSteamworks/tree/master/Manifests)
 
 ## The client crashes a lot or doesn't start
 Delete `~/.local/share/OpenSteam` and try again. Also check that you have a PC that meets the requirements for Steam officially, as well as OpenSteamClient.
-Also, run OpenSteamClient from the terminal and post the logs in a Github issue clearly describing your situation. 
+Also, run OpenSteamClient from the terminal and post the logs in a Github issue clearly describing your situation.

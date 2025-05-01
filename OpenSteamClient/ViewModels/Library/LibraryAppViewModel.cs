@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Media;
@@ -53,47 +54,63 @@ public partial class LibraryAppViewModel : Node
 
     private void CalculateName()
     {
-        string name = App.Name;
+        StringBuilder name = new StringBuilder(72);
+        name.Append(App.Name);
         bool isColored = true;
+
+        if (App is IAppConfigInterface configInterface && configInterface.TryGetConfigValue(IAppConfigInterface.ConfigKey.ACTIVE_BETA, out object? val) && val is string beta)
+        {
+            if (!string.IsNullOrEmpty(beta) && beta != "public")
+            {
+                name.Append($" [{beta}]");
+            }
+        }
 
         if (App.State.HasFlag(EAppState.Uninstalling))
         {
-            name += " - Uninstalling";
+            name.Append(" - Uninstalling");
         } else if (App.State.HasFlag(EAppState.MovingFolder))
         {
-            name += " - Moving";
+            name.Append(" - Moving");
         } else if (App.State.HasFlag(EAppState.Terminating))
         {
-            name += " - Stopping";
+            name.Append(" - Stopping");
         } else if (App.State.HasFlag(EAppState.AppRunning))
         {
-            name += " - Running";
+            name.Append(" - Running");
         } else if (App.State.HasFlag(EAppState.UpdateRunning))
         {
             //TODO: This should be in the format of "- {updateProgressPct}%"
-            name += " - Update Running";
+            name.Append(" - Update Running");
         } else if (App.State.HasFlag(EAppState.UpdatePaused))
         {
-            name += " - Update Paused";
+            name.Append(" - Update Paused");
         } else if (App.State.HasFlag(EAppState.UpdateQueued))
         {
-            name += " - Update Queued";
+            name.Append(" - Update Queued");
         } else if (App.State.HasFlag(EAppState.UpdateRequired))
         {
-            name += " - Update Required";
+            name.Append(" - Update Required");
         } else if (App.State.HasFlag(EAppState.UpdatePaused))
         {
-            name += " - Update Paused";
+            name.Append(" - Update Paused");
         }
         else
         {
             isColored = false;
         }
 
-        Name = name;
+        Name = name.ToString();
 
         //TODO: Not ideal, we can't use theme default
-        Foreground = isColored ? Brushes.Aquamarine : Brushes.White;
+        if (!isColored && App is IAppInstallInterface installInterface)
+        {
+            Foreground = installInterface.IsInstalled ? Brushes.White : Brushes.DarkGray;
+        }
+        else
+        {
+            Foreground = isColored ? Brushes.Aquamarine : Brushes.White;
+        }
     }
 
     private void SetLibraryAssets()

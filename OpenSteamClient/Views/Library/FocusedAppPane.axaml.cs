@@ -10,6 +10,7 @@ using OpenSteamClient.DI;
 using OpenSteamClient.ViewModels;
 using OpenSteamClient.ViewModels.Library;
 using OpenSteamClient.Views.Windows;
+using OpenSteamworks;
 using OpenSteamworks.Data.Structs;
 using OpenSteamworks.Client.Apps;
 using OpenSteamworks.Helpers;
@@ -31,7 +32,7 @@ public partial class FocusedAppPane : BasePage
 
         var wnd = new AppSettingsWindow
         {
-            DataContext = new AppSettingsWindowViewModel(AvaloniaApp.Container.Get<CompatHelper>(), vm.App)
+            DataContext = new AppSettingsWindowViewModel(AvaloniaApp.Container.Get<ISteamClient>(), vm.App)
         };
 
         wnd.Show(AvaloniaApp.Current!.MainWindow!);
