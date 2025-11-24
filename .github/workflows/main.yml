@@ -1,0 +1,77 @@
+name: .NET Build
+
+# Trigger the workflow on push or pull request
+on:
+  push:
+    paths:
+      - "**.cs"
+      - "**.csproj"
+      - "**.axaml"
+      - "**.cpp"
+      - "**.h"
+      - "**.hpp"
+      - ".github/workflows/dotnet.yaml"
+      - "Directory.Build.props"
+  pull_request:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download repo and submodules
+      run: | 
+        git submodule update --init --recursive
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Install build dependencies
+      run: | 
+        sudo apt-get update
+        sudo apt-get install -y clang zlib1g-dev
+    - name: Build Release OpenSteamClient (Linux)
+      working-directory: ./OpenSteamClient
+      run: dotnet publish --use-current-runtime -c Release
+
+    # Since NativeAOT doesn't cross compile, and we build on Linux, the release folder is only "release" and not "release_linux-x64"
+    - name: Create OpenSteamClient zip (Linux)
+      working-directory: ./artifacts/publish/OpenSteamClient/release/
+      run: sh -c 'zip -r "${GITHUB_WORKSPACE}/OpenSteamClient_Linux.zip" .'
+
+    - name: Add OpenSteamClient Linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenSteamClient (Linux)
+        path: ${{ github.workspace }}/OpenSteamClient_Linux.zip
+  build-win:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download repo and submodules
+      run: | 
+        git submodule update --init --recursive
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    # No NativeAOT cross compile, so just build a regular trimmed version instead.
+    - name: Build Release OpenSteamClient (Windows)
+      working-directory: ./OpenSteamClient
+      run: dotnet publish --self-contained --runtime win-x64 -c Release /p:PublishAot=false
+
+    - name: Create OpenSteamClient zip (Windows)
+      working-directory: ./artifacts/publish/OpenSteamClient/release_win-x64/
+      run: sh -c 'zip -r "${GITHUB_WORKSPACE}/OpenSteamClient_Windows.zip" .'
+
+    - name: Add OpenSteamClient Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenSteamClient (Windows)
+        path: ${{ github.workspace }}/OpenSteamClient_Windows.zip
